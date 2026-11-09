@@ -31,6 +31,15 @@ export interface BacktestConfig {
   limitCheck: boolean;
   /** 无风险年利率，用于夏普比率 */
   riskFreeRate: number;
+  /**
+   * 波动率目标（年化），0 表示关闭。仓位 × min(1, 目标波动 / 近期实现波动)，
+   * 并按 10% 档位取整以减少频繁调仓（Carver《Advanced Futures Trading Strategies》）。
+   */
+  volTarget: number;
+  /** 计算实现波动率的回看周期 */
+  volLookback: number;
+  /** 最长持仓 K 线数，到期按开盘价离场，0 表示关闭（López de Prado 三重障碍法中的“时间障碍”） */
+  maxHoldBars: number;
 }
 
 export type MarketPreset = 'A' | 'HK' | 'US' | 'custom';
@@ -50,6 +59,9 @@ export const DEFAULT_CONFIG: BacktestConfig = {
   trailingStop: 0,
   limitCheck: true,
   riskFreeRate: 0.02,
+  volTarget: 0,
+  volLookback: 20,
+  maxHoldBars: 0,
 };
 
 /** 不同市场的交易规则预设 */
@@ -83,7 +95,7 @@ export const MARKET_PRESETS: Record<Exclude<MarketPreset, 'custom'>, Partial<Bac
   },
 };
 
-export type FillReason = 'signal' | 'stopLoss' | 'takeProfit' | 'trailingStop';
+export type FillReason = 'signal' | 'stopLoss' | 'takeProfit' | 'trailingStop' | 'timeExit';
 
 export interface Fill {
   index: number;
@@ -154,6 +166,16 @@ export interface Metrics {
   totalFees: number;
   bars: number;
   years: number;
+  /** 收益偏度 */
+  skew: number;
+  /** 收益峰度（正态分布 = 3） */
+  kurtosis: number;
+  /** 概率夏普比率：真实夏普 > 0 的概率（Bailey & López de Prado） */
+  psr: number;
+  /** 凯利比例 = 胜率 − 败率 / 盈亏比 */
+  kelly: number;
+  /** Merton 比例（风险厌恶系数 2）：建议投入该策略的资金比例 */
+  merton: number;
 }
 
 export interface BacktestResult {

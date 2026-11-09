@@ -1,6 +1,7 @@
 import { computeMetrics, drawdownSeries } from './backtest/metrics';
 import type { Metrics } from './backtest/types';
 import { std } from './backtest/metrics';
+import { regressionMomentum } from './indicators';
 import type { Bar, Period, StockMeta } from './types';
 import { periodsPerYear } from './types';
 
@@ -20,6 +21,10 @@ export interface RotationConfig {
   absoluteMomentum: boolean;
   /** 权重方式 */
   weighting: 'equal' | 'invVol';
+  /** 排名方式：区间涨幅 / Clenow 回归动量（年化斜率 × R²） */
+  scoring: 'roc' | 'clenow';
+  /** 避险资产代码：动量不达标时资金转入它而非现金（Antonacci 双动量） */
+  safeAsset?: string;
   initialCapital: number;
   /** 交易费率（佣金 + 印花税等，单边） */
   feeRate: number;
@@ -35,6 +40,7 @@ export const DEFAULT_ROTATION: RotationConfig = {
   topN: 1,
   absoluteMomentum: true,
   weighting: 'equal',
+  scoring: 'roc',
   initialCapital: 100000,
   feeRate: 0.0003,
   slippage: 0.001,
@@ -106,6 +112,11 @@ export function runRotation(assets: RotationAsset[], cfg: RotationConfig, period
   assets.forEach((a) => (weights[a.meta.code] = []));
   const rebalances: RebalanceRecord[] = [];
   const baseClose = assets.map((_, a) => closeAt(a, start));
+  const safeIdx = cfg.safeAsset ? assets.findIndex((a) => a.meta.code === cfg.safeAsset) : -1;
+  const clenowScores =
+    cfg.scoring === 'clenow'
+      ? assets.map((_, a) => regressionMomentum(allDates.map((_, t) => closeAt(a, t)), Math.max(10, cfg.lookback)))
+      : null;
 
   for (let t = start; t <= end; t++) {
     // 1. 按上一次信号在开盘价调仓
@@ -151,12 +162,14 @@ export function runRotation(assets: RotationAsset[], cfg: RotationConfig, period
 
     // 3. 调仓日收盘计算信号
     if ((t - start) % cfg.rebalanceEvery === 0 && t < end) {
-      const scores = assets.map((as, a) => ({
-        a,
-        code: as.meta.code,
-        name: as.meta.name,
-        score: closeAt(a, t) / closeAt(a, t - cfg.lookback) - 1,
-      }));
+      const scores = assets
+        .map((as, a) => ({
+          a,
+          code: as.meta.code,
+          name: as.meta.name,
+          score: clenowScores ? clenowScores[a][t] / 100 : closeAt(a, t) / closeAt(a, t - cfg.lookback) - 1,
+        }))
+        .filter((s) => s.a !== safeIdx && Number.isFinite(s.score));
       const ranked = [...scores].sort((x, y) => y.score - x.score);
       const picked = ranked.slice(0, cfg.topN).filter((s) => !cfg.absoluteMomentum || s.score > 0);
       const w = new Array<number>(N).fill(0);
@@ -173,6 +186,10 @@ export function runRotation(assets: RotationAsset[], cfg: RotationConfig, period
         } else {
           picked.forEach((s) => (w[s.a] = 1 / cfg.topN));
         }
+      }
+      if (safeIdx >= 0) {
+        const used = w.reduce((x, y) => x + y, 0);
+        if (used < 0.999) w[safeIdx] += 1 - used;
       }
       const cur = assets.map((_, a) => (eq > 0 ? (shares[a] * closeAt(a, t)) / eq : 0));
       const turnover = w.reduce((s, x, a) => s + Math.abs(x - cur[a]), 0) / 2;

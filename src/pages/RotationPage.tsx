@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { equityOption, stackedAreaOption } from '../app/charts';
 import { fmtNum, fmtPct, toneClass } from '../app/format';
 import { useApp } from '../app/store';
@@ -10,7 +10,9 @@ import { DEMO_SPECS, loadStock, ROTATION_PRESETS } from '../lib/data';
 import { DEFAULT_ROTATION, runRotation, type RotationAsset, type RotationConfig, type RotationResult } from '../lib/portfolio';
 import type { StockMeta } from '../lib/types';
 
-const DEMO_PRESET = {
+type Preset = (typeof ROTATION_PRESETS)[number];
+
+const DEMO_PRESET: Preset = {
   name: '演示组合（离线）',
   desc: '4 只演示资产，无需联网即可体验（随机生成，不代表真实动量效应）',
   assets: [0, 2, 4, 5].map((i) => DEMO_SPECS[i].meta),
@@ -19,13 +21,27 @@ const DEMO_PRESET = {
 export default function RotationPage() {
   const toast = useApp((s) => s.toast);
   const p = usePalette();
-  const [assets, setAssets] = useState<StockMeta[]>(ROTATION_PRESETS[0].assets);
-  const [cfg, setCfg] = useState<RotationConfig>(DEFAULT_ROTATION);
+  const presets = [...ROTATION_PRESETS, DEMO_PRESET];
+  const initial = (() => {
+    const pending = useApp.getState().pendingRotation;
+    return presets.find((x) => x.name === pending) ?? presets.find((x) => x.name === 'A 股大小盘轮动') ?? presets[0];
+  })();
+  const [activePreset, setActivePreset] = useState(initial.name);
+  const [assets, setAssets] = useState<StockMeta[]>(initial.assets);
+  const [cfg, setCfg] = useState<RotationConfig>({ ...DEFAULT_ROTATION, ...(initial.config ?? {}) });
+  useEffect(() => {
+    useApp.getState().setPendingRotation(null);
+  }, []);
   const [progress, setProgress] = useState<number | null>(null);
   const [result, setResult] = useState<RotationResult | null>(null);
   const [failed, setFailed] = useState<string[]>([]);
 
-  const presets = [...ROTATION_PRESETS, DEMO_PRESET];
+  const applyPreset = (pr: Preset) => {
+    setAssets(pr.assets);
+    setCfg({ ...DEFAULT_ROTATION, start: cfg.start, end: cfg.end, ...(pr.config ?? {}) });
+    setResult(null);
+    setActivePreset(pr.name);
+  };
   const set = (patch: Partial<RotationConfig>) => setCfg({ ...cfg, ...patch });
 
   const run = async (list = assets) => {
@@ -106,17 +122,15 @@ export default function RotationPage() {
                   <button
                     key={pr.name}
                     type="button"
-                    className="chip"
+                    className={`chip ${activePreset === pr.name ? 'on' : ''}`}
                     title={pr.desc}
-                    onClick={() => {
-                      setAssets(pr.assets);
-                      setResult(null);
-                    }}
+                    onClick={() => applyPreset(pr)}
                   >
                     {pr.name}
                   </button>
                 ))}
               </div>
+              <p className="field-hint">{presets.find((x) => x.name === activePreset)?.desc}</p>
               <StockSearch placeholder="添加标的：代码或名称" onPick={(mm) => !assets.some((a) => a.secid === mm.secid) && setAssets([...assets, mm])} />
               <div className="chips">
                 {assets.map((a) => (
@@ -158,7 +172,32 @@ export default function RotationPage() {
                   ]}
                 />
               </div>
-              <Check label="绝对动量：动量为负时空仓" checked={cfg.absoluteMomentum} onChange={(v) => set({ absoluteMomentum: v })} />
+              <div className="field">
+                <span className="field-label">排名方式</span>
+                <Seg
+                  block
+                  ariaLabel="排名方式"
+                  value={cfg.scoring}
+                  onChange={(v) => set({ scoring: v })}
+                  options={[
+                    { value: 'roc', label: '区间涨幅' },
+                    { value: 'clenow', label: 'Clenow 回归动量' },
+                  ]}
+                />
+              </div>
+              <Check label="绝对动量：动量为负时不持有" checked={cfg.absoluteMomentum} onChange={(v) => set({ absoluteMomentum: v })} />
+              <div className="field">
+                <label htmlFor="rot-safe">避险资产（双动量）</label>
+                <select id="rot-safe" className="select" value={cfg.safeAsset ?? ''} onChange={(e) => set({ safeAsset: e.target.value || undefined })}>
+                  <option value="">无，空出的仓位持有现金</option>
+                  {assets.map((a) => (
+                    <option key={a.secid} value={a.code}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="field-hint">选中的资产不参与排名，动量不达标时资金转入它（Antonacci《Dual Momentum》）。</span>
+              </div>
               <div className="fields-2">
                 <div className="field">
                   <label htmlFor="rot-start">开始日期</label>
@@ -193,7 +232,7 @@ export default function RotationPage() {
                     type="button"
                     className="btn"
                     onClick={() => {
-                      setAssets(DEMO_PRESET.assets);
+                      applyPreset(DEMO_PRESET);
                       void run(DEMO_PRESET.assets);
                     }}
                   >

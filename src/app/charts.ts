@@ -288,6 +288,7 @@ export const REASON: Record<string, string> = {
   stopLoss: '止损',
   takeProfit: '止盈',
   trailingStop: '移动止损',
+  timeExit: '持仓到期',
   open: '持仓中',
 };
 

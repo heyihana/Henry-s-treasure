@@ -17,6 +17,7 @@ import {
   superTrend,
 } from '../indicators';
 import type { Bar } from '../types';
+import { BOOK_STRATEGIES } from './books';
 import type { StrategyDef, StrategyOutput } from './types';
 
 /**
@@ -479,6 +480,7 @@ export const buyHold: StrategyDef = {
 export const BUILTIN_STRATEGIES: StrategyDef[] = [
   maCross,
   macdCross,
+  ...BOOK_STRATEGIES,
   turtle,
   maTrend,
   superTrendStrategy,

@@ -3,6 +3,31 @@ import { periodsPerYear } from '../types';
 import { computeMetrics, drawdownSeries } from './metrics';
 import type { BacktestConfig, BacktestResult, Fill, FillReason, Trade } from './types';
 
+/**
+ * 波动率目标：仓位 × min(1, 目标年化波动 / 近 lookback 期实现波动)，按 10% 档位取整。
+ */
+export function volTargetPositions(bars: Bar[], positions: number[], target: number, lookback: number, ppy: number): number[] {
+  const n = bars.length;
+  const out = positions.slice();
+  const lb = Math.max(5, Math.floor(lookback));
+  const rets: number[] = new Array(n).fill(NaN);
+  for (let i = 1; i < n; i++) rets[i] = Math.log(bars[i].close / bars[i - 1].close);
+  for (let i = 0; i < n; i++) {
+    if (i < lb) continue;
+    let s = 0;
+    let s2 = 0;
+    for (let j = i - lb + 1; j <= i; j++) {
+      s += rets[j];
+      s2 += rets[j] * rets[j];
+    }
+    const m = s / lb;
+    const vol = Math.sqrt(Math.max(0, (s2 - lb * m * m) / (lb - 1))) * Math.sqrt(ppy);
+    const scale = vol > 0 ? Math.min(1, target / vol) : 1;
+    out[i] = Math.round(positions[i] * scale * 10) / 10;
+  }
+  return out;
+}
+
 export interface RunOptions {
   /** 回测起始下标（含），默认 0 */
   start?: number;
@@ -42,6 +67,7 @@ export function runBacktest(
   const end = Math.min(bars.length - 1, options.end ?? bars.length - 1);
   const period = options.period ?? 'day';
   const lot = Math.max(1, Math.floor(config.lotSize) || 1);
+  if (config.volTarget > 0) positions = volTargetPositions(bars, positions, config.volTarget, config.volLookback || 20, periodsPerYear(period));
 
   let cash = config.initialCapital;
   let shares = 0;
@@ -152,6 +178,22 @@ export function runBacktest(
   };
 
   const sellable = () => (config.tPlusOne ? Math.max(0, shares - boughtToday) : shares);
+  const entryIndex = () => (trade ? trade.entryIndex : -1);
+
+  /** 时间障碍：持仓超过 maxHoldBars 根 K 线，开盘离场 */
+  const checkTime = (i: number) => {
+    if (!(config.maxHoldBars > 0) || shares <= 0) return;
+    const e = entryIndex();
+    if (e < 0 || i - e < config.maxHoldBars) return;
+    const qty = sellable();
+    const price = bars[i].open;
+    if (qty <= 0 || sellBlocked(i, price)) return;
+    sell(i, price, qty, 'timeExit');
+    if (shares === 0) {
+      currentTarget = 0;
+      riskBlocked = true;
+    }
+  };
 
   /** 调整到目标仓位，返回是否完全成交 */
   const rebalance = (i: number, price: number, target: number): boolean => {
@@ -230,6 +272,7 @@ export function runBacktest(
       applyTarget(i, bar.open, positions[i - 1]);
     }
 
+    checkTime(i);
     checkRisk(i);
 
     if (config.execution === 'close') {

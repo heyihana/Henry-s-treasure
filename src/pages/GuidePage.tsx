@@ -46,6 +46,9 @@ export default function GuidePage() {
             <li>
               在<strong>策略工坊</strong>搭建自己的条件策略或代码策略，再到<strong>自选扫描</strong>里批量查看今天的信号。
             </li>
+            <li>
+              用<strong>巴菲特工具箱</strong>估算内在价值和安全边际，在<strong>量化书房</strong>里读新书要点，并一键跳到对应功能验证。
+            </li>
           </ol>
         </Panel>
         <Panel title="回测假设">

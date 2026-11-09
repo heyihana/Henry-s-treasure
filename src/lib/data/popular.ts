@@ -54,7 +54,18 @@ export const DEFAULT_WATCHLIST: StockMeta[] = POPULAR.filter((s) =>
 );
 
 /** ETF 轮动常用组合 */
-export const ROTATION_PRESETS: { name: string; desc: string; assets: StockMeta[] }[] = [
+export const ROTATION_PRESETS: {
+  name: string;
+  desc: string;
+  assets: StockMeta[];
+  config?: { lookback?: number; rebalanceEvery?: number; topN?: number; safeAsset?: string; scoring?: 'roc' | 'clenow'; absoluteMomentum?: boolean };
+}[] = [
+  {
+    name: '双动量 GEM',
+    desc: 'Antonacci《Dual Momentum》：沪深300 vs 纳指，12 个月动量取强者；都跑输则转入国债',
+    assets: POPULAR.filter((s) => ['510300', '513100', '511010'].includes(s.code)),
+    config: { lookback: 250, rebalanceEvery: 21, topN: 1, safeAsset: '511010', absoluteMomentum: true, scoring: 'roc' },
+  },
   {
     name: 'A 股大小盘轮动',
     desc: '沪深300 / 中证500 / 创业板，经典“二八轮动”的扩展版',

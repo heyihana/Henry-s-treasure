@@ -120,3 +120,39 @@ export function guessSecid(input: string): string | null {
   if (m) return `105.${m[2].toUpperCase()}`;
   return null;
 }
+
+export interface Valuation {
+  price: number;
+  pe: number;
+  pb: number;
+  roe: number;
+  marketCap: number;
+}
+
+const numOrNaN = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : NaN);
+
+/** 解析东方财富单只股票报价中的估值字段（f43 价格、f162 市盈率、f167 市净率、f173 ROE%、f116 总市值） */
+export function parseValuation(res: { data?: Record<string, unknown> | null }): Valuation {
+  const d = res?.data;
+  if (!d) throw new Error('没有估值数据');
+  const pe = numOrNaN(d.f162);
+  const pb = numOrNaN(d.f167);
+  const roe = numOrNaN(d.f173);
+  return {
+    price: numOrNaN(d.f43),
+    pe: pe > 0 && pe < 5000 ? pe : NaN,
+    pb: pb > 0 && pb < 500 ? pb : NaN,
+    roe: Math.abs(roe) < 300 ? roe / 100 : NaN,
+    marketCap: numOrNaN(d.f116),
+  };
+}
+
+/** 获取估值指标（实验性：字段含义来自东方财富网页接口，可能变动，结果需人工核对） */
+export async function fetchValuation(secid: string): Promise<Valuation> {
+  const res = await jsonp<{ data?: Record<string, unknown> | null }>(
+    'https://push2.eastmoney.com/api/qt/stock/get',
+    { secid, ut: 'fa5fd1943c7b386f172d6893dbfba10b', fltt: 2, invt: 2, fields: 'f43,f57,f58,f116,f162,f167,f173' },
+    { timeout: 8000 },
+  );
+  return parseValuation(res);
+}

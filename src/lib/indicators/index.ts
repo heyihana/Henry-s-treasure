@@ -351,3 +351,61 @@ export function columns(bars: { open: number; high: number; low: number; close: 
   }
   return { open, high, low, close, volume };
 }
+
+/**
+ * Clenow 回归动量（《Stocks on the Move》）：对最近 n 根收盘价的对数做线性回归，
+ * 年化斜率 (e^{b·ppy} − 1) 乘以 R²，兼顾涨得快和涨得稳。
+ */
+export function regressionMomentum(close: Series, n = 90, ppy = 252): Series {
+  const out = nanArray(close.length);
+  const tMean = (n - 1) / 2;
+  let tVar = 0;
+  for (let t = 0; t < n; t++) tVar += (t - tMean) * (t - tMean);
+  for (let i = n - 1; i < close.length; i++) {
+    let yMean = 0;
+    let ok = true;
+    for (let t = 0; t < n; t++) {
+      const v = close[i - n + 1 + t];
+      if (!(v > 0)) {
+        ok = false;
+        break;
+      }
+      yMean += Math.log(v);
+    }
+    if (!ok) continue;
+    yMean /= n;
+    let cov = 0;
+    let yVar = 0;
+    for (let t = 0; t < n; t++) {
+      const y = Math.log(close[i - n + 1 + t]) - yMean;
+      cov += (t - tMean) * y;
+      yVar += y * y;
+    }
+    const b = cov / tVar;
+    const r2 = yVar > 0 ? (cov * cov) / (tVar * yVar) : 0;
+    out[i] = (Math.exp(b * ppy) - 1) * r2 * 100;
+  }
+  return out;
+}
+
+/** 指数加权标准差（span 形式），用于波动率归一化 */
+export function ewmStd(values: Series, span = 35): Series {
+  const out = nanArray(values.length);
+  const alpha = 2 / (span + 1);
+  let m = NaN;
+  let v = 0;
+  for (let i = 0; i < values.length; i++) {
+    const x = values[i];
+    if (!Number.isFinite(x)) continue;
+    if (!Number.isFinite(m)) {
+      m = x;
+      v = 0;
+    } else {
+      const d = x - m;
+      m += alpha * d;
+      v = (1 - alpha) * (v + alpha * d * d);
+    }
+    out[i] = Math.sqrt(v);
+  }
+  return out;
+}

@@ -8,6 +8,8 @@ export const ROUTES = [
   { id: 'rotation', label: '组合轮动' },
   { id: 'screener', label: '自选扫描' },
   { id: 'lab', label: '策略工坊' },
+  { id: 'buffett', label: '巴菲特' },
+  { id: 'library', label: '量化书房' },
   { id: 'guide', label: '使用说明' },
 ] as const;
 

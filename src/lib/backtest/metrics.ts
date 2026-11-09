@@ -163,6 +163,14 @@ export function computeMetrics(input: MetricsInput): Metrics {
     } else streak = 0;
   }
 
+  const mo = moments(rs);
+  const sdR = std(rs);
+  const srPer = sdR > 0 ? (mean(rs) - rf / ppy) / sdR : 0;
+  const plr = avgLoss > 0 ? avgWin / avgLoss : 0;
+  const wr = closed.length ? wins.length / closed.length : 0;
+  const varAnnual = rs.length > 1 ? sdR * sdR * ppy : 0;
+  const exAnnual = rs.length ? mean(rs) * ppy - rf : 0;
+
   return {
     initialCapital,
     finalEquity,
@@ -195,7 +203,79 @@ export function computeMetrics(input: MetricsInput): Metrics {
     totalFees: fills.reduce((s, f) => s + f.fee, 0),
     bars: n,
     years,
+    skew: mo.skew,
+    kurtosis: mo.kurtosis,
+    psr: probabilisticSharpe(srPer, 0, rs.length, mo.skew, mo.kurtosis),
+    kelly: closed.length >= 5 && plr > 0 ? wr - (1 - wr) / plr : 0,
+    merton: varAnnual > 0 ? exAnnual / (2 * varAnnual) : 0,
   };
+}
+
+/** 标准正态分布累积函数 */
+export function normCdf(x: number): number {
+  // Abramowitz-Stegun 7.1.26
+  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-(x * x) / 2);
+  return x >= 0 ? (1 + y) / 2 : (1 - y) / 2;
+}
+
+/** 标准正态分布分位数（Acklam 近似） */
+export function normInv(p: number): number {
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];
+  const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
+  const c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+  const d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+  const pl = 0.02425;
+  if (p < pl) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  if (p > 1 - pl) return -normInv(1 - p);
+  const q = p - 0.5;
+  const r = q * q;
+  return ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+export function moments(xs: number[]): { skew: number; kurtosis: number } {
+  const n = xs.length;
+  if (n < 4) return { skew: 0, kurtosis: 3 };
+  const m = mean(xs);
+  let m2 = 0;
+  let m3 = 0;
+  let m4 = 0;
+  for (const x of xs) {
+    const d = x - m;
+    m2 += d * d;
+    m3 += d * d * d;
+    m4 += d * d * d * d;
+  }
+  m2 /= n;
+  m3 /= n;
+  m4 /= n;
+  if (!(m2 > 0)) return { skew: 0, kurtosis: 3 };
+  return { skew: m3 / Math.pow(m2, 1.5), kurtosis: m4 / (m2 * m2) };
+}
+
+/**
+ * 概率夏普比率 PSR：考虑样本长度、偏度、峰度后，真实夏普比率超过基准 sr0 的概率。
+ * sr、sr0 为单期（非年化）夏普。Bailey & López de Prado (2012)。
+ */
+export function probabilisticSharpe(sr: number, sr0: number, n: number, skew: number, kurtosis: number): number {
+  if (n < 3) return 0.5;
+  const denom = Math.sqrt(Math.max(1e-12, 1 - skew * sr + ((kurtosis - 1) / 4) * sr * sr));
+  return normCdf(((sr - sr0) * Math.sqrt(n - 1)) / denom);
+}
+
+/**
+ * 紧缩夏普比率 DSR 的基准：在做了 trials 次尝试、各次夏普方差为 varSr 时，
+ * 单纯靠运气能得到的最大夏普期望值。Bailey & López de Prado (2014)。
+ */
+export function expectedMaxSharpe(varSr: number, trials: number): number {
+  if (trials < 2 || !(varSr > 0)) return 0;
+  const g = 0.5772156649;
+  return Math.sqrt(varSr) * ((1 - g) * normInv(1 - 1 / trials) + g * normInv(1 - 1 / (trials * Math.E)));
 }
 
 export interface PeriodReturn {

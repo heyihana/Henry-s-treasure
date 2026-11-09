@@ -230,6 +230,11 @@ export function ConfigPanel({ defaultOpen = false }: { defaultOpen?: boolean }) 
           <NumberField id="cfg-sl" label="止损" suffix="%" value={config.stopLoss} scale={100} min={0} max={50} step={1} hint="0 为关闭" onChange={(v) => setConfig({ stopLoss: v })} />
           <NumberField id="cfg-tp" label="止盈" suffix="%" value={config.takeProfit} scale={100} min={0} max={500} step={1} hint="0 为关闭" onChange={(v) => setConfig({ takeProfit: v })} />
           <NumberField id="cfg-ts" label="移动止损" suffix="%" value={config.trailingStop} scale={100} min={0} max={50} step={1} hint="自持仓最高点回撤" onChange={(v) => setConfig({ trailingStop: v })} />
+          <NumberField id="cfg-maxhold" label="最长持仓" suffix="根K线" value={config.maxHoldBars} min={0} max={1000} step={1} hint="到期离场，0 为关闭" onChange={(v) => setConfig({ maxHoldBars: Math.round(v) })} />
+        </div>
+        <div className="fields-2">
+          <NumberField id="cfg-voltarget" label="波动率目标" suffix="% 年化" value={config.volTarget} scale={100} min={0} max={80} step={1} hint="0 为关闭；波动大时自动减仓" onChange={(v) => setConfig({ volTarget: v })} />
+          <NumberField id="cfg-vollb" label="波动率回看" suffix="根K线" value={config.volLookback} min={5} max={250} step={1} onChange={(v) => setConfig({ volLookback: Math.round(v) })} />
         </div>
       </div>
     </Collapsible>
@@ -277,6 +282,10 @@ export function MetricsTable({ m }: { m: Metrics }) {
     ['持仓时间占比', fmtPct(m.exposure, 1, false), '100%'],
     ['手续费合计', fmtMoney(m.totalFees), '—'],
     ['回测长度', `${m.bars} 根 / ${fmtNum(m.years, 1)} 年`, '—'],
+    ['概率夏普 PSR', fmtPct(m.psr, 1, false), '—', m.psr >= 0.95 ? 'up' : ''],
+    ['收益偏度 / 峰度', `${fmtNum(m.skew)} / ${fmtNum(m.kurtosis, 1)}`, '—'],
+    ['凯利比例（半凯利）', m.tradeCount < 5 ? '交易太少' : m.kelly <= 0 ? '≤ 0，不宜加仓' : `${fmtPct(m.kelly, 0, false)}（${fmtPct(m.kelly / 2, 0, false)}）`, '—'],
+    ['Merton 建议投入（γ=2）', m.merton <= 0 ? '≤ 0，不宜持有' : fmtPct(m.merton, 0, false), '—'],
   ];
   return (
     <div className="table-wrap">

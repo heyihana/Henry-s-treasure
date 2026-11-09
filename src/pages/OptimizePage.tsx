@@ -340,6 +340,15 @@ export default function OptimizePage() {
                     <MetricCol title="样本外（验证）" m={best.oos} range={res.oosRange} />
                   </div>
                   {verdict && <div className={`banner ${verdict.cls === 'bear' ? 'error' : verdict.cls === 'neutral' ? 'warn' : ''}`}>{verdict.text}</div>}
+                  {res.deflated && (
+                    <div className={`banner ${res.deflated.dsr >= 0.95 ? '' : res.deflated.dsr >= 0.5 ? 'warn' : 'error'}`}>
+                      <span className="grow small">
+                        <b>紧缩夏普 DSR = {fmtPct(res.deflated.dsr, 1, false)}</b>（普通 PSR {fmtPct(res.deflated.psr, 1, false)}）。试了 {res.deflated.trials}{' '}
+                        组参数，单靠运气就能挑出年化夏普约 {fmtNum(res.deflated.luckSharpe)} 的组合。DSR 是“最优参数的真实夏普高于这个运气门槛”的概率，≥ 95% 才算比较可信。
+                        <span className="muted">（López de Prado《Advances in Financial Machine Learning》）</span>
+                      </span>
+                    </div>
+                  )}
                   <p className="xs muted">
                     计算 {res.total - res.skipped} 个组合（跳过 {res.skipped} 个无效组合，如短均线 ≥ 长均线），耗时 {(res.elapsedMs / 1000).toFixed(1)} 秒。
                   </p>

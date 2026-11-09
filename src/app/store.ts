@@ -28,6 +28,9 @@ interface State {
   /** 数据源切换提示 */
   notice: string | null;
   toasts: Toast[];
+  /** 从其他页面跳转到组合轮动时要应用的预设名称 */
+  pendingRotation: string | null;
+  setPendingRotation(name: string | null): void;
 
   // 持久化
   period: Period;
@@ -73,6 +76,10 @@ export const useApp = create<State>()(
       error: null,
       notice: null,
       toasts: [],
+      pendingRotation: null,
+      setPendingRotation(name) {
+        set({ pendingRotation: name });
+      },
 
       period: 'day',
       adjust: 'qfq',

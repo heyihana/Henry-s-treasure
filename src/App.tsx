@@ -12,6 +12,8 @@ const RotationPage = lazy(() => import('./pages/RotationPage'));
 const ScreenerPage = lazy(() => import('./pages/ScreenerPage'));
 const LabPage = lazy(() => import('./pages/LabPage'));
 const GuidePage = lazy(() => import('./pages/GuidePage'));
+const BuffettPage = lazy(() => import('./pages/BuffettPage'));
+const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 
 function BrandMark() {
   return (
@@ -147,6 +149,10 @@ function Page({ route }: { route: RouteId }) {
       return <LabPage />;
     case 'guide':
       return <GuidePage />;
+    case 'buffett':
+      return <BuffettPage />;
+    case 'library':
+      return <LibraryPage />;
     default:
       return <MarketPage />;
   }

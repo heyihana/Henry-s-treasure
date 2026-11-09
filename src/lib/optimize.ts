@@ -1,6 +1,7 @@
 import { runBacktest } from './backtest/engine';
 import { rangeToIndex, type DateRange } from './backtest/run';
 import type { BacktestConfig, Metrics } from './backtest/types';
+import { expectedMaxSharpe, probabilisticSharpe } from './backtest/metrics';
 import { paramsValid, resolveStrategy, type StrategySpec } from './strategies';
 import { normalizeParams, type Params } from './strategies/types';
 import type { Bar, Period } from './types';
@@ -41,7 +42,7 @@ export interface OptimizeRequest {
 
 export type MetricSummary = Pick<
   Metrics,
-  'totalReturn' | 'annualReturn' | 'sharpe' | 'sortino' | 'maxDrawdown' | 'calmar' | 'winRate' | 'tradeCount' | 'profitFactor'
+  'totalReturn' | 'annualReturn' | 'sharpe' | 'sortino' | 'maxDrawdown' | 'calmar' | 'winRate' | 'tradeCount' | 'profitFactor' | 'skew' | 'kurtosis' | 'bars'
 >;
 
 export interface OptimizeRow {
@@ -61,6 +62,11 @@ export interface OptimizeResult {
   total: number;
   skipped: number;
   elapsedMs: number;
+  /**
+   * 紧缩夏普比率 DSR：考虑到试了这么多组参数后，最优组合的真实夏普 > 运气门槛的概率。
+   * Bailey & López de Prado (2014)，《Advances in Financial Machine Learning》第 14 章。
+   */
+  deflated?: { dsr: number; psr: number; luckSharpe: number; trials: number };
 }
 
 export const MAX_COMBOS = 2500;
@@ -87,7 +93,28 @@ const summarize = (m: Metrics): MetricSummary => ({
   winRate: m.winRate,
   tradeCount: m.tradeCount,
   profitFactor: m.profitFactor,
+  skew: m.skew,
+  kurtosis: m.kurtosis,
+  bars: m.bars,
 });
+
+/** 计算最优组合的紧缩夏普比率 */
+export function deflatedSharpe(rows: OptimizeRow[], ppy: number) {
+  const valid = rows.filter((r) => Number.isFinite(r.score) && r.is.bars > 2);
+  if (valid.length < 2) return undefined;
+  const best = valid[0];
+  const per = valid.map((r) => r.is.sharpe / Math.sqrt(ppy));
+  const m = per.reduce((a, b) => a + b, 0) / per.length;
+  const v = per.reduce((a, b) => a + (b - m) * (b - m), 0) / (per.length - 1);
+  const luck = expectedMaxSharpe(v, valid.length);
+  const sr = best.is.sharpe / Math.sqrt(ppy);
+  return {
+    dsr: probabilisticSharpe(sr, luck, best.is.bars - 1, best.is.skew, best.is.kurtosis),
+    psr: probabilisticSharpe(sr, 0, best.is.bars - 1, best.is.skew, best.is.kurtosis),
+    luckSharpe: luck * Math.sqrt(ppy),
+    trials: valid.length,
+  };
+}
 
 export function scoreOf(m: MetricSummary, objective: Objective): number {
   switch (objective) {
@@ -142,7 +169,9 @@ export function runOptimize(req: OptimizeRequest, onProgress?: (done: number, to
     if (onProgress && (done % 20 === 0 || done === total)) onProgress(done, total);
   }
   rows.sort((a, b) => b.score - a.score);
+  const ppy = req.period === 'week' ? 52 : req.period === 'month' ? 12 : 252;
   return {
+    deflated: deflatedSharpe(rows, ppy),
     rows,
     axes: req.axes,
     axisValues: values,
