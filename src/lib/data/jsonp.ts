@@ -34,7 +34,7 @@ export function jsonp<T>(
     script.onerror = () => {
       if (settled) return;
       finish();
-      reject(new Error('无法连接行情接口（网络受限或被拦截）'));
+      reject(new Error('无法连接行情接口，可能是网络受限'));
     };
     const timer = setTimeout(() => {
       if (settled) return;

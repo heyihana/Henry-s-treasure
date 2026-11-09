@@ -30,8 +30,8 @@ export interface RotationConfig {
 }
 
 export const DEFAULT_ROTATION: RotationConfig = {
-  lookback: 20,
-  rebalanceEvery: 20,
+  lookback: 60,
+  rebalanceEvery: 10,
   topN: 1,
   absoluteMomentum: true,
   weighting: 'equal',

@@ -8,7 +8,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 export default defineConfig(({ mode }) => ({
   base: './',
   plugins: mode === 'single' ? [react(), viteSingleFile()] : [react()],
-  worker: { format: 'es' },
+  worker: { format: 'iife' },
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist',
     chunkSizeWarningLimit: 1500,
