@@ -110,6 +110,9 @@ export function StrategyPanel() {
 
 /* ---------------- 回测区间 ---------------- */
 
+/** 窄屏（手机 / 平板竖屏）时默认收起次要面板，让结果更靠前 */
+const isNarrow = () => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 1080px)').matches;
+
 export function RangePanel({ bars }: { bars: Bar[] }) {
   const range = useApp((s) => s.range);
   const setRange = useApp((s) => s.setRange);
@@ -123,7 +126,7 @@ export function RangePanel({ bars }: { bars: Bar[] }) {
   ];
   const activeQuick = quick.find((q) => (q.y === 0 ? !range.start && !range.end : !range.end && range.start === shiftDate(last, -q.y)));
   return (
-    <Collapsible title="回测区间" extra={<span className="xs muted mono">{range.start || first} ~ {range.end || last}</span>}>
+    <Collapsible title="回测区间" defaultOpen={!isNarrow()} extra={<span className="xs muted mono">{range.start || first} ~ {range.end || last}</span>}>
       <div className="fields">
         <div className="chips">
           {quick.map((q) => (
