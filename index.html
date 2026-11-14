@@ -71,11 +71,17 @@ h1 em { font-style: italic; color: var(--gold); padding: 0 .12em; }
 .chip { padding: 7px 14px; border-radius: 999px; font-size: 13px; background: var(--chip); border: 1px solid var(--line); }
 .chip b { font-weight: 600; color: var(--gold); }
 
+/* 画布颗粒：让颜色有油画布的粗糙感 */
+.grain {
+  position: fixed; inset: 0; pointer-events: none; mix-blend-mode: overlay; opacity: .55;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
 @media (prefers-reduced-motion: reduce) { .card { animation: none; } }
 </style>
 
 <canvas id="sky" aria-hidden="true"></canvas>
 <canvas id="land" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
 
 <main>
   <section class="card">
@@ -156,21 +162,6 @@ const cv = $('sky'), ctx = cv.getContext('2d'), land = $('land'), lctx = land.ge
 const BLUES = ['#1d3f94', '#2b5fc0', '#4f86d9', '#8fb8ee', '#16306f', '#c9def5', '#2f6fb5', '#3a9bb8'];
 const GOLDS = ['#ffe27a', '#ffc93c', '#fff3b8', '#f6a623', '#ffe9a0'];
 const HALO = ['#ffe9a0', '#d9e7b0', '#a9d6c8', '#fff3b8', '#8fc7d9'];
-const RING = ['#fff6c8', '#ffd95a', '#f3c64a', '#b7dccb'];
-/* 梵高式光晕：一圈圈断续的短笔触，各圈反向缓慢转动 */
-function rings(x, y, r, t, seed, n) {
-  ctx.lineCap = 'round';
-  for (let k = 0; k < n; k++) {
-    const rad = r * (1.25 + k * .62), cnt = 7 + k * 4, gap = 6.2832 / cnt, rot = t * .0001 * (k % 2 ? -1 : 1) * (1.6 - k * .25) + seed + k;
-    ctx.strokeStyle = RING[Math.min(k, RING.length - 1)]; ctx.globalAlpha = .95 - k * .17;
-    ctx.lineWidth = Math.max(1.6, r * (.2 - k * .028));
-    for (let i = 0; i < cnt; i++) {
-      const a = rot + i * gap, wob = Math.sin(seed * 7 + i * 2.3 + k) * r * .09;
-      ctx.beginPath(); ctx.arc(x, y, rad + wob, a, a + gap * (.5 + .18 * Math.sin(seed + i * 1.7))); ctx.stroke();
-    }
-  }
-  ctx.globalAlpha = 1;
-}
 const STARS = [[.1, .07, 1], [.4, .04, .7], [.63, .12, .85], [.93, .33, 1.1], [.06, .31, .8], [.94, .6, .75], [.05, .62, .95], [.27, .17, .6], [.7, .78, .6]];
 let W = 0, H = 0, U = 0, strokes = [], vort = [], stars = [], moon = null, moonImg = null, bursts = [], frameNo = 0;
 
@@ -204,7 +195,7 @@ function layout() {
   if (reduced) { for (let i = 0; i < 420; i++) step(i * 16, false); step(0, true); }
 }
 function newStroke() {
-  return { x: R(0, W), y: R(0, H * .9), w: R(1.4, 3.6), sp: R(.28, .62), c: Math.floor(R(0, 40)), life: Math.floor(R(0, 700)) };
+  return { x: R(0, W), y: R(0, H * .9), w: R(1.8, 4.8), sp: R(.28, .62), c: Math.floor(R(0, 40)), life: Math.floor(R(0, 700)) };
 }
 function step(t, tops = true) {
   frameNo++;
@@ -218,15 +209,19 @@ function step(t, tops = true) {
       const g = Math.exp(-q * q) * 3;
       vx += (-dy / d * v.s + dx / d * (.6 - q) * .5) * g;
       vy += (dx / d * v.s + dy / d * (.6 - q) * .5) * g;
-      if (v.gold && q > .34 && q < .92) gold = q < .6 ? 1 : 2;
+      if (v.gold && q < .98) gold = q < .62 ? 1 : 2;
       if (v.core && q < .55) dim = 1;
     }
     const m = p.sp / (Math.hypot(vx, vy) || 1), nx = p.x + vx * m, ny = p.y + vy * m;
     if (p.life % 130 < 88) {                      // 断续落笔，像一道道短笔触
-      ctx.globalAlpha = dim ? .28 : gold ? .7 : .9;
-      ctx.strokeStyle = gold && p.c % 3 ? (gold === 1 ? GOLDS[p.c % GOLDS.length] : HALO[p.c % HALO.length]) : BLUES[p.c % BLUES.length];
+      ctx.globalAlpha = dim ? .28 : gold ? .8 : .9;
+      ctx.strokeStyle = gold === 1 ? GOLDS[p.c % GOLDS.length] : gold && p.c % 4 ? HALO[p.c % HALO.length] : BLUES[p.c % BLUES.length];
       ctx.lineWidth = p.w;
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(nx, ny); ctx.stroke();
+      if (p.w > 3.2 && !dim) {                   // 厚涂：粗笔触上再提一道亮边
+        ctx.globalAlpha = .3; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = p.w * .22;
+        ctx.beginPath(); ctx.moveTo(p.x - .9, p.y - .9); ctx.lineTo(nx - .9, ny - .9); ctx.stroke();
+      }
     }
     p.x = nx; p.y = ny;
     if (++p.life > 1100 || nx < -10 || nx > W + 10 || ny < -10 || ny > H + 10) Object.assign(p, newStroke(), { life: 0 });
@@ -234,16 +229,15 @@ function step(t, tops = true) {
   if (!tops) return;
   ctx.globalAlpha = 1;
   for (const s of stars) {
-    rings(s.x, s.y, s.r, t, s.p, 4);
-    const r = s.r * (1.02 + .1 * Math.sin(t * .002 + s.p));
+    const r = s.r * (3.3 + .3 * Math.sin(t * .0012 + s.p));
     const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
-    g.addColorStop(0, '#fffef2'); g.addColorStop(.55, '#ffe9a0'); g.addColorStop(1, 'rgba(255,217,90,0)');
+    g.addColorStop(0, '#fffdf0'); g.addColorStop(.16, 'rgba(255,244,180,.96)'); g.addColorStop(.3, 'rgba(255,220,100,.5)');
+    g.addColorStop(.6, 'rgba(246,176,50,.13)'); g.addColorStop(1, 'rgba(120,200,190,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, 6.3); ctx.fill();
   }
-  rings(moon.x, moon.y, moon.r * .92, t, 2, 4);
-  const mg = ctx.createRadialGradient(moon.x, moon.y, moon.r * .5, moon.x, moon.y, moon.r * 2);
-  mg.addColorStop(0, 'rgba(255,214,90,.22)'); mg.addColorStop(1, 'rgba(255,214,90,0)');
-  ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(moon.x, moon.y, moon.r * 2, 0, 6.3); ctx.fill();
+  const mg = ctx.createRadialGradient(moon.x, moon.y, moon.r * .4, moon.x, moon.y, moon.r * 2.6);
+  mg.addColorStop(0, 'rgba(255,225,120,.5)'); mg.addColorStop(.45, 'rgba(250,190,60,.16)'); mg.addColorStop(1, 'rgba(255,214,90,0)');
+  ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(moon.x, moon.y, moon.r * 2.6, 0, 6.3); ctx.fill();
   ctx.drawImage(moonImg, moon.x - moon.r, moon.y - moon.r, moon.r * 2, moon.r * 2);
   for (const b of bursts) {
     b.x += b.vx; b.y += b.vy; b.vy += .05; b.life -= .014;
