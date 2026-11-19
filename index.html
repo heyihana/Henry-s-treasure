@@ -5,70 +5,155 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Paris & Henry</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,400;1,500&family=Noto+Serif+SC:wght@400;600&display=swap">
+<meta name="theme-color" content="#0d1b4b">
+<!-- 字体：Fraunces 柔和的斜体写名字、它的直立体只取 0-9 排数字；思源宋体只取页面上用到的汉字（约 10 KB）。
+     样式表异步加载（media=print 加载完再切成 all）：字体服务器慢或连不上时，页面照常立刻显示，用系统字体。
+     改了 ui.js / ui.body.html 里的中文，要把新字补进下面 text= 里 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" data-font media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@1,48,400,100,1&amp;display=swap">
+<link rel="stylesheet" data-font media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..500,0..100&amp;family=Noto+Serif+SC:wght@500&amp;display=swap&amp;text=0123456789·〇一七三世两个久九二于五今你八六分十周四在天始就年我日时星是月有期爱生百的秒第至起还长">
 <style>
 /* 布局：一屏。几层画布叠成会流动的星月夜，文字居中叠在天空上。 */
 html, body { height: 100%; }
 body { margin: 0; overflow: hidden; background: var(--sky); color: var(--fg); -webkit-tap-highlight-color: transparent; }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* ── 文字层：名字、“在一起的第 N 天”、起始日、走动的时钟、下一个纪念日 ── */
 :root {
   color-scheme: dark;
-  --sky: #0d1b4b;            /* 普鲁士蓝夜空 */
-  --sky-deep: #070d26;       /* 山丘与阴影 */
-  --fg: #fdf6d8;             /* 月光白 */
-  --muted: #b9c8ee;          /* 淡钴蓝 */
-  --gold: #ffd95a;           /* 星与月 */
-  --amber: #f6a623;
-  --chip: rgba(7, 13, 38, .55); --line: rgba(255, 217, 90, .35);
-  --font-num: "Cormorant Garamond", "Noto Serif SC", Georgia, serif;
-  --font-zh: "Noto Serif SC", "Songti SC", "PingFang SC", serif;
+  --sky: #0d1b4b;                /* 页面底色（画布出来之前） */
+  --fg: #fbf0d2;                 /* 奶油白：名字 */
+  --pale: #dfe7f8;               /* 月光蓝白：小字 */
+  --mute: #a9b9df;               /* 更淡的灰蓝：说明性的字 */
+  --gold: #f6c94e;               /* 铬黄：小号数字 */
+  --ink: 5, 10, 34;              /* 压在字下面的深蓝（rgb） */
+  --halo: 0 0 1px rgba(var(--ink), .7), 0 1px 3px rgba(var(--ink), .65), 0 0 14px rgba(var(--ink), .5);
+  --latin: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --zh: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
+  --ease: cubic-bezier(.22, .68, .2, 1);
+  /* 版面尺度：--fs 小字字号，--D 大数字所在“旋涡眼”的直径。全部只跟窗口有关、不跟字体有关，
+     所以字体晚到、换上来时，量出来的位置一点不变 */
+  --fs: max(12px, min(3.75vw, 1.9vh, 20px));
+  --D: min(82vw, 40vh, 400px);
 }
 main {
-  position: fixed; inset: 0; overflow-y: auto; box-sizing: border-box;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding-block: calc(20px + env(safe-area-inset-top, 0px)) calc(17vh + env(safe-area-inset-bottom, 0px));
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  position: fixed; inset: 0; overflow: hidden auto; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center;
+  /* 底部留出山丘与小镇（文字不低于 H*.80）；顶部略留空，让数字落在画面偏中的位置 */
+  padding: max(12px, 6vh, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+           calc(20vh + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
 }
+main:focus-visible { outline: 2px solid var(--gold); outline-offset: -4px; }
 .card {
-  display: flex; flex-direction: column; align-items: center; gap: 12px;
-  max-width: 100%; text-align: center;
-  text-shadow: 0 1px 14px rgba(5, 10, 34, .95), 0 0 3px rgba(5, 10, 34, .8);
-  animation: rise 1.1s cubic-bezier(.2, .8, .2, 1) both;
+  position: relative; box-sizing: border-box; width: min(100%, 22em); margin-block: auto;
+  display: flex; flex-direction: column; align-items: center;
+  font: 500 var(--fs)/1.5 var(--zh); color: var(--pale); text-align: center; white-space: nowrap;
+  font-synthesis: none; text-shadow: var(--halo); -webkit-font-smoothing: antialiased;
 }
-@keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.card p { margin: 0; }
+.card b { font-weight: inherit; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
-h1 {
-  margin: 0; font-family: var(--font-num); font-style: italic; font-weight: 500;
-  font-size: clamp(34px, 10vw, 54px); line-height: 1.05; letter-spacing: .01em; color: var(--fg);
+/* 名字：题献。柔软的斜体，& 用铬黄 */
+.names {
+  position: relative; margin: 0;
+  font: italic 400 2.5em/1.2 var(--latin); color: var(--fg); letter-spacing: .005em;
 }
-h1 em { font-style: italic; color: var(--gold); padding: 0 .12em; }
-.lead, .unit { font-size: clamp(15px, 4.2vw, 19px); letter-spacing: .5em; text-indent: .5em; color: var(--muted); }
+.amp { color: var(--gold); padding: 0 .02em; }
+
+/* 在一起的第 · 大数字 · 天 */
+.count { display: flex; flex-direction: column; align-items: center; margin-top: .85em !important; }
+.lead, .unit { position: relative; z-index: 1; letter-spacing: .5em; padding-left: .5em; color: var(--pale); }
+.lead { font-size: 1.06em; }
+.unit { font-size: 1.2em; }
 .core {
-  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  width: min(86vw, 46vh, 440px); aspect-ratio: 1; margin-block: -6px;
-  background: radial-gradient(closest-side, rgba(7, 13, 38, .72), rgba(7, 13, 38, .4) 55%, transparent);
+  position: relative; flex: none; display: grid; place-items: center;
+  width: var(--D); height: var(--D); margin-block: calc(var(--D) * -.215);
+  /* 数字字号：一两位时由旋涡眼决定；位数多了按屏宽缩小（这款数字最宽的 0 约 .57em） */
+  --F: min(calc(var(--D) * .64), calc((100vw - 40px) * .94 / (var(--n) * .56 + .12)));
 }
+.core { --n: 2; }
+.digits { display: grid; }
 .num {
-  --n: 2;
-  display: flex; justify-content: center;
-  font-family: var(--font-num); font-weight: 300; line-height: .95;
-  font-size: min(clamp(120px, 42vw, 250px), calc(78vw / (var(--n) * .5)));
-  font-variant-numeric: lining-nums tabular-nums;
-  background: linear-gradient(180deg, #fffbe6 15%, var(--gold) 60%, var(--amber));
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  text-shadow: none; filter: drop-shadow(0 0 26px rgba(255, 205, 80, .55));
+  grid-area: 1 / 1; padding: 0 .05em;
+  font: 300 var(--F)/1 "Fraunces", "Iowan Old Style", Palatino, "Palatino Linotype", serif;
+  font-variation-settings: "opsz" 144, "SOFT" 100;
+  font-variant-numeric: lining-nums; letter-spacing: -.015em;
 }
-.since { font-size: clamp(13px, 3.6vw, 16px); color: var(--muted); letter-spacing: .08em; }
-.live { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px; font-size: clamp(15px, 4.2vw, 19px); }
-.clock { font-family: var(--font-num); font-variant-numeric: lining-nums tabular-nums; font-size: 1.25em; color: var(--gold); }
-.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; text-shadow: none; }
-.chip { padding: 7px 14px; border-radius: 999px; font-size: 13px; background: var(--chip); border: 1px solid var(--line); }
-.chip b { font-weight: 600; color: var(--gold); }
+.num i, .live i { display: inline-block; font-style: normal; text-align: center; }
+/* 数字像月亮那样被颜料画出来的光：上亮下暖的铬黄，右上方（月亮那边）受光，叠一层极细的同心笔痕，和四周的旋涡同向 */
+.gold {
+  color: #ffd860;
+  background:
+    radial-gradient(ellipse 60% 45% at 72% 12%, rgba(255, 253, 238, .45), rgba(255, 253, 238, 0)),
+    repeating-radial-gradient(circle at 50% 46%, rgba(255, 252, 235, 0) 0 .016em, rgba(255, 252, 235, .11) .021em, rgba(255, 252, 235, 0) .026em),
+    linear-gradient(174deg, #fff7d8 6%, #ffe58e 30%, #fbca46 60%, #ef9d2c 94%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  text-shadow: none;
+}
+/* 垫在金色下面的一份：深蓝细边把字从画面里托出来，外面一圈暖光 */
+.shade {
+  -webkit-text-fill-color: transparent; color: transparent;
+  text-shadow: 0 0 .008em rgba(var(--ink), .85), 0 .012em .05em rgba(var(--ink), .7), 0 0 .3em rgba(255, 184, 60, .3);
+}
 
-@media (prefers-reduced-motion: reduce) { .card { animation: none; } }
-/* 质感全部画在 #finish 画布上（普通半透明层）；#grain 不再需要，整页没有混合模式层 */
-#grain { display: none; }
+/* 小字：起始日、至今、下一个纪念日 */
+.notes { position: relative; display: flex; flex-direction: column; align-items: center; gap: .35em; margin-top: 2.1em; }
+.notes::before, .names::before {           /* 字下面一层羽化的深蓝薄涂，没有边 */
+  content: ''; position: absolute; z-index: -1; inset: -.9em -2.2em;
+  background: radial-gradient(closest-side, rgba(var(--ink), .5), rgba(var(--ink), .28) 60%, rgba(var(--ink), 0));
+}
+.names::before { inset: -.25em -.6em; }
+.notes b { font-family: var(--latin), var(--zh); font-variant-numeric: lining-nums tabular-nums; }
+.notes b { font-variation-settings: "opsz" 14, "SOFT" 50; font-weight: 400; color: var(--fg); padding: 0 .04em; }
+.since { font-size: .94em; color: var(--mute); }
+.live { font-size: 1em; }
+.live i { width: .6em; }                  /* 时、分、秒每位一格，走字时整行纹丝不动 */
+.live .sec { color: var(--gold); animation: ember .8s ease-out; }
+@keyframes ember { from { color: #fffaea; } 30% { color: #ffe9a6; } }   /* 新的一秒先亮一下再回到铬黄，像星星闪一下；只动颜色，重绘很省 */
+
+.next { display: flex; align-items: center; justify-content: center; gap: 1.1em; margin-top: .9em; }
+.next p { display: flex; flex-direction: column; align-items: center; line-height: 1.45; }
+.next .h { font-family: var(--zh); font-size: 1em; color: var(--fg); }
+.next .h b { color: var(--gold); }
+.next span { font-size: .86em; color: var(--mute); }
+.next span b { color: var(--pale); }
+.rule { width: 1px; height: 2.1em; background: linear-gradient(transparent, rgba(246, 201, 78, .55), transparent); }
+
+/* ── 入场：名字 → 在一起的第 → 数字（滚动并落定）→ 天 → 小字 ── */
+@keyframes rise { from { opacity: 0; transform: translateY(.45em); } }
+@keyframes bloom { from { opacity: 0; transform: scale(.93); } }
+.names { animation: rise 1.2s var(--ease) .45s both; }
+.lead { animation: rise 1s var(--ease) .75s both; }
+.digits { animation: bloom 1.6s var(--ease) .85s both; }
+.unit { animation: rise .9s var(--ease) 1.6s both; }
+.notes > * { animation: rise .8s var(--ease) 1.9s both; }
+.notes > :nth-child(2) { animation-delay: 2s; }
+.notes > :nth-child(3) { animation-delay: 2.1s; }
+
+/* ── 大屏：稍放大，不让文字缩在一大片天空里 ── */
+@media (min-width: 760px) and (min-height: 700px) {
+  :root { --fs: min(2.3vh, 2.6vw, 24px); --D: min(50vh, 60vw, 520px); }
+}
+/* ── 手机横屏这类矮屏：一句话横排“在一起的第 N 天”，小字并成两行 ── */
+@media (orientation: landscape) and (max-height: 560px) {
+  :root { --fs: max(11.5px, min(3.3vh, 1.9vw, 17px)); --D: min(62vh, 34vw); }
+  main { padding-top: max(8px, env(safe-area-inset-top, 0px)); }
+  .card { width: min(100%, 46em); }
+  .count { flex-direction: row; align-items: baseline; margin-top: 0 !important; }
+  /* 方形的旋涡眼比数字宽：左右收进来，让“第”和“天”贴着数字 */
+  .core { margin: calc(var(--D) * -.19) calc((var(--n) * .5 + .1) * var(--F) / 2 - var(--D) / 2); }
+  .lead, .unit { font-size: 1.25em; }
+  .lead { padding-left: 0; margin-right: .1em; letter-spacing: .32em; }
+  .unit { margin-left: .5em; padding-left: 0; letter-spacing: 0; }
+  .notes { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: .2em 1.4em; margin-top: .6em; }
+  .next { gap: .9em; margin-top: 0; flex-basis: 100%; }
+  .next p { flex-direction: row; gap: .5em; align-items: baseline; }
+  .rule { height: 1em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .names, .lead, .digits, .unit, .notes > *, .live .sec { animation: none; }
+}
 /* 互动层的触摸约定：连点不触发双击放大，长按、拖动不选中文字；
    一屏放得下时（Fx 给 <html> 加 .fx-still）拖动整个交给页面，星尘才能一路跟着手指 */
 main { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -79,20 +164,22 @@ main { touch-action: manipulation; -webkit-user-select: none; user-select: none;
 <canvas id="lights" aria-hidden="true"></canvas>
 <canvas id="land" aria-hidden="true"></canvas>
 <canvas id="finish" aria-hidden="true"></canvas>
-<div id="grain" aria-hidden="true"></div>
 
 <main>
-  <section class="card">
-    <h1 id="names"></h1>
-    <div class="lead">在一起的第</div>
-    <div class="core" id="core">
-      <div class="num" id="days"></div>
-      <div class="unit">天</div>
+  <article class="card" id="card">
+    <h1 class="names" id="names"></h1>
+    <p class="count">
+      <span class="sr" id="sr"></span>
+      <span class="lead" aria-hidden="true">在一起的第</span>
+      <span class="core" id="core" aria-hidden="true"><span class="digits"><span class="num shade" id="shade"></span><span class="num gold" id="days"></span></span></span>
+      <span class="unit" aria-hidden="true">天</span>
+    </p>
+    <div class="notes">
+      <p class="since" id="since"></p>
+      <p class="live" id="live"></p>
+      <div class="next" id="next"></div>
     </div>
-    <div class="since" id="since"></div>
-    <div class="live"><span id="ymd"></span><span class="clock" id="clock" aria-hidden="true"></span></div>
-    <div class="chips" id="chips"></div>
-  </section>
+  </article>
 </main>
 
 <canvas id="fx" aria-hidden="true"></canvas>
@@ -130,68 +217,101 @@ const Scene = {
   emit(ev, d) { (this._h[ev] || []).forEach(f => f(d)); }
 };
 
-/* ── 文字：日期计算、计时、入场 ── */
+/* ── 文字：日期计算、入场时数字滚动、每秒走动的时钟 ── */
 const UI = (() => {
   /* ── 日期 ── */
   const [SY, SM, SD] = CONFIG.start, DAY = 86400000;
   const startUTC = Date.UTC(SY, SM - 1, SD);
-  const todayUTC = n => Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
-  const dayNo = n => Math.round((todayUTC(n) - startUTC) / DAY) + 1;
-  function elapsed(now) {
+  const dateUTC = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayNo = d => Math.max(1, Math.round((dateUTC(d) - startUTC) / DAY) + 1);   // 起始日算第 1 天
+  const pad = n => String(n).padStart(2, '0');
+  const fig = n => `<b>${n}</b>`;                       // 数字一律用拉丁字体排，汉字用宋体
+  const slots = v => [...String(v)].map(d => `<i>${d}</i>`).join('');   // 定宽格子：Fraunces 的数字不等宽，会变的数字一位一格
+  const ZH = '〇一二三四五六七八九';
+  const zhNum = n => n === 2 ? '两' : n < 10 ? ZH[n] : n < 20 ? '十' + (n % 10 ? ZH[n % 10] : '') : ZH[n / 10 | 0] + '十' + (n % 10 ? ZH[n % 10] : '');
+  const SPECIAL = { 100: '百日', 520: '我爱你', 1314: '一生一世', 3344: '生生世世', 5200: '我爱你', 9999: '长长久久' };
+
+  /* 已经过了几年几个月几天（按日历算），零的部分不写 */
+  function ymd(now) {
     let y = now.getFullYear() - SY, m = now.getMonth() + 1 - SM, d = now.getDate() - SD;
     if (d < 0) { m--; d += new Date(now.getFullYear(), now.getMonth(), 0).getDate(); }
     if (m < 0) { y--; m += 12; }
-    return [y && y + ' 年', m && m + ' 个月', d + ' 天'].filter(Boolean).join(' ');
+    if (y < 0) return '';
+    return (y ? fig(y) + ' 年 ' : '') + (m ? fig(m) + ' 个月 ' : '') + (d ? fig(d) + ' 天 ' : '');
   }
-  const SPECIAL = { 100: '百日', 520: '我爱你', 1314: '一生一世', 3344: '生生世世', 5200: '我爱你', 9999: '长长久久' };
-  function nextMilestone(n) {
-    const c = [30, 50, ...Object.keys(SPECIAL).map(Number), (Math.floor(n / 100) + 1) * 100];
-    return Math.min(...c.filter(x => x > n));
-  }
+  const nextMilestone = n => Math.min(...[30, 50, ...Object.keys(SPECIAL).map(Number), (Math.floor(n / 100) + 1) * 100].filter(x => x > n));
   function nextAnniversary(now) {
     let y = now.getFullYear();
-    if (Date.UTC(y, SM - 1, SD) <= todayUTC(now)) y++;
-    return { years: y - SY, left: Math.round((Date.UTC(y, SM - 1, SD) - todayUTC(now)) / DAY) };
+    if (Date.UTC(y, SM - 1, SD) <= dateUTC(now)) y++;
+    return { years: y - SY, left: Math.round((Date.UTC(y, SM - 1, SD) - dateUTC(now)) / DAY) };
   }
-  const pad = n => String(n).padStart(2, '0');
-  let shown = -1, counting = false;
-  function showNum(n) { const s = String(n); $('days').textContent = s; $('days').style.setProperty('--n', Math.max(2, s.length)); }
+  /* 今天本身是不是纪念日：周年、特别的数字、整百天 */
+  function todayLabel(now, n) {
+    const years = now.getFullYear() - SY;
+    if (years > 0 && now.getMonth() + 1 === SM && now.getDate() === SD) return zhNum(years) + '周年';
+    return SPECIAL[n] || (n % 100 === 0 ? `第 ${n} 天` : '');
+  }
+
+  /* ── 显示 ── */
+  let shown = 0, counting = false;
+  const layers = () => [$('days'), $('shade')];          // 金色数字和垫在下面的深色那份，内容始终一样
+  function showNum(v) { for (const el of layers()) el.textContent = v; }
+  const col = (head, sub) => `<p><b class="h">${head}</b><span>${sub}</span></p>`;
+  function newDay(now, n) {
+    shown = n;
+    const label = todayLabel(now, n), an = nextAnniversary(now), ms = nextMilestone(n);
+    Scene.day = n; Scene.milestone = label;
+    $('core').style.setProperty('--n', Math.max(2, String(n).length));   // 字号只跟最终位数有关，滚动时不跳
+    $('sr').textContent = `在一起的第 ${n} 天`;
+    if (!counting) showNum(n);
+    // 第一栏：今天就是纪念日时写“就是今天”，否则写下一个；第二栏：下一个周年
+    const first = label
+      ? col(label.replace(/\d+/, fig), '就是今天')
+      : col(`第 ${fig(ms)} 天`, `还有 ${fig(ms - n)} 天${SPECIAL[ms] ? ' · ' + SPECIAL[ms] : ''}`);
+    $('next').innerHTML = first + '<i class="rule"></i>' + col(zhNum(an.years) + '周年', `还有 ${fig(an.left)} 天`);
+  }
   function tick() {
     const now = new Date(), n = dayNo(now);
-    if (n !== shown) {
-      shown = n;
-    const an0 = now.getMonth() + 1 === SM && now.getDate() === SD && now.getFullYear() > SY;
-    Scene.day = n; Scene.milestone = an0 ? (now.getFullYear() - SY) + ' 周年' : SPECIAL[n] || (n % 100 === 0 ? '第 ' + n + ' 天' : '');
-      if (!counting) showNum(n);
-      $('ymd').textContent = '已经相伴 ' + elapsed(now);
-      const ms = nextMilestone(n), an = nextAnniversary(now);
-      $('chips').innerHTML =
-        `<span class="chip">第 <b>${ms}</b> 天${SPECIAL[ms] ? ' · ' + SPECIAL[ms] : ''} · 还有 ${ms - n} 天</span>` +
-        `<span class="chip"><b>${an.years}</b> 周年 · 还有 ${an.left} 天</span>`;
-    }
-    $('clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    if (n !== shown) newDay(now, n);
+    // 每秒整行重写：秒数是新元素，它那一下微光动画随之重放
+    $('live').innerHTML = `至今 ${ymd(now)}${fig(slots(pad(now.getHours())))} 时 ${fig(slots(pad(now.getMinutes())))} 分 <b class="sec">${slots(pad(now.getSeconds()))}</b> 秒`;
+    setTimeout(tick, 1010 - now.getMilliseconds());     // 对齐到整秒，秒数换得均匀
   }
+
+  /* 入场：数字从 0 滚到今天，越到后面越慢，像落定下来。
+     滚动时每一位放进按最终那一位量好宽度的格子里，整串数字不会左右晃；落定后换回正常排版，位置不变 */
   function countUp() {
     if (Scene.reduced) return;
     counting = true;
-    const t0 = performance.now(), dur = 1800;
+    const to = shown, len = String(to).length, t0 = performance.now() + 900, dur = 1500 + 90 * len;
+    for (const el of layers()) el.innerHTML = slots(to);
+    const w = [...$('days').children].map(i => getComputedStyle(i).width);   // 只量这一次，不受入场缩放影响
+    for (const el of layers()) [...el.children].forEach((i, k) => { i.style.width = w[k]; });
     (function step(t) {
-      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 4);
-      showNum(Math.round(shown * e));
-      if (p < 1) requestAnimationFrame(step); else counting = false;
-    })(t0);
+      const p = Math.max(0, Math.min(1, (t - t0) / dur));
+      const v = String(Math.round(to * (1 - Math.pow(1 - p, 2.6)))).padStart(len, ' ');
+      for (const el of layers()) [...el.children].forEach((i, k) => { i.textContent = v[k].trim(); });
+      if (p < 1) requestAnimationFrame(step); else { counting = false; showNum(shown); }
+    })(performance.now());
   }
+
   let started = false;
   function init() {
     if (started) return; started = true;
-    $('names').innerHTML = `${CONFIG.names[0]}<em>&amp;</em>${CONFIG.names[1]}`;
-    $('since').textContent = `起始日 ${SY}-${SM}-${SD} 星期${'日一二三四五六'[new Date(SY, SM - 1, SD).getDay()]}`;
+    const [a, b] = CONFIG.names;
+    $('names').innerHTML = `${a} <span class="amp">&amp;</span> ${b}`;
+    const wk = '日一二三四五六'[new Date(SY, SM - 1, SD).getDay()];
+    $('since').innerHTML = `始于 ${fig(SY)} 年 ${fig(SM)} 月 ${fig(SD)} 日 · 星期${wk}`;
     tick(); countUp();
-    setInterval(tick, 1000);
+    // 字体样式表是异步加载的（见 ui.head.html）；万一 onload 没执行，页面加载完再补一次
+    addEventListener('load', () => document.querySelectorAll('link[data-font]').forEach(l => { l.media = 'all'; }));
   }
-  /* 告诉其他图层：数字在哪、文字占了哪块 */
+
+  /* 告诉其他图层：数字在哪、文字占了哪块。
+     #core 与 #card 本身从不做动画（入场动画只在它们的子元素上），而且尺寸不依赖字体，
+     所以任何时候量都是最终位置，字体换上来也不会变 */
   function measure() {
-    const c = $('core').getBoundingClientRect(), b = document.querySelector('.card').getBoundingClientRect();
+    const c = $('core').getBoundingClientRect(), b = $('card').getBoundingClientRect();
     return {
       core: { x: c.left + c.width / 2, y: c.top + c.height / 2, r: c.width / 2 },
       box: { left: b.left, top: b.top, right: b.right, bottom: b.bottom }
@@ -201,42 +321,47 @@ const UI = (() => {
 })();
 
 /* ── 星与月：柔和发光、带笔触的油画光晕，画在 #lights 上 ──
-   每个光源在布局时画成一张小贴图（柔光 + 沿圆周的软笔触 + 厚涂的亮核），
-   每帧只做贴图合成：缓慢呼吸、各自闪烁、光晕随天空的旋涡慢慢转动。 */
+   每个光源在布局时画成一张小贴图（一层层颜色的柔光 + 顺着光晕走的软笔触 + 厚涂的亮核），
+   每帧只把贴图合成上去：缓慢呼吸、各自闪烁、光晕随天空的旋涡极慢地转。 */
 const Lights = (() => {
   const TAU = Math.PI * 2;
   /* 由星核向外的七层颜色：奶白 → 柠檬黄 → 铬黄 → 橙 → 淡绿 → 青白 → 蓝白 */
   const PAL = {
-    gold:  ['#fffbe6', '#ffee9a', '#ffd43f', '#f7a521', '#dbe7a0', '#a9d9cc', '#cfe3f5'],
-    lemon: ['#fffde9', '#fff4ac', '#f6e15e', '#e8bd3c', '#cfe6ac', '#a4dccf', '#d3e8f6'],
-    amber: ['#fff6d2', '#ffe07a', '#ffbf2e', '#f08a1a', '#dedb90', '#a2d2c2', '#c6dcf2'],
-    white: ['#ffffff', '#fdfce8', '#f3f1b8', '#e9d47c', '#d2ebd8', '#b7e0e8', '#deecfb'],
-    moon:  ['#fff8d6', '#ffee96', '#ffd640', '#f6a01c', '#e0e89c', '#aadbc8', '#cfe4f4']
+    gold:  ['#fffbe6', '#ffee9a', '#ffd43f', '#f7a521', '#d3e69a', '#98d6c8', '#a9d2ee'],
+    lemon: ['#fffde9', '#fff4ac', '#f6e15e', '#e8bd3c', '#cbe6a4', '#94d9cb', '#aed6f0'],
+    amber: ['#fff6d2', '#ffe07a', '#ffbf2e', '#f08a1a', '#dcd98a', '#93cfbe', '#a6cdee'],
+    white: ['#ffffff', '#fdfce8', '#f4f2c0', '#ecd98a', '#c8ead2', '#a2dce6', '#bcdcf6'],
+    moon:  ['#fff4c8', '#ffe27a', '#ffc93c', '#f39a1c', '#d9e696', '#98d4c4', '#acd4f0']
   };
-  const CRESCENT = ['#ffb52e', '#ffc648', '#ffd76a', '#f79a1e', '#ec8213', '#ffb52e'];
-  /* 星位：[区, u, v, 大小, 性格]。T 顶部条带，L / R 左右留白（u 从屏幕边向文字方向数），B 文字与山之间。
-     按先后取用，放不下（挡字、太挤、被柏树遮住）的自动跳过，所以同一张表适用于各种屏幕。 */
+  const CRESCENT = ['#ffb52e', '#ffc648', '#ffd76a', '#f79a1e', '#ec8213', '#ffbe3a'];
+  /* 星位：[区, u, v, 大小, 性格]。按先后取用，放不下（挡字、太挤、被柏树遮住、离月亮太近）就跳过，
+     所以同一张表适用于各种屏幕：小屏只取到前九个左右，大屏多取几个。
+     T 顶部：x = u·W，y = v·顶部条带高；L / R 左右留白：u 从屏幕边量到文字边，y = v·山脊线；
+     B 文字下方、山上方的一条。 */
   const SLOTS = [
-    ['T', .11, .52, 1.15, 'gold'],
-    ['L', .85, .62, 1.3, 'white'],      // 宽屏：柏树右侧低处的"长庚星"
-    ['L', .60, .43, 1.3, 'white'],      // 窄屏：改到柏树梢上方
-    ['R', .30, .36, 1.0, 'gold'],
-    ['R', .82, .44, .9, 'gold'],
-    ['R', .10, .62, .7, 'lemon'],
-    ['L', .78, .20, .6, 'lemon'],
-    ['T', .40, .30, .6, 'lemon'],
-    ['R', .30, .80, .9, 'amber'],
-    ['T', .585, .66, .8, 'gold'],
-    ['L', .20, .34, .8, 'amber'],
-    ['R', .55, .70, 1.1, 'gold'],
+    ['T', .11, .52, 1.15, 'gold'],      // 左上的大星
+    ['L', .85, .62, 1.3, 'white'],      // 宽屏："长庚星"，低低地在柏树梢右边
+    ['L', .55, .40, 1.3, 'white'],      // 窄屏：放到柏树上方的左边
+    ['R', .45, .36, 1.0, 'gold'],
+    ['R', .70, .50, 1.05, 'gold'],
+    ['T', .41, .30, .6, 'lemon'],
+    ['R', .15, .64, .75, 'lemon'],
+    ['L', .80, .17, .62, 'lemon'],
+    ['R', .75, .82, .9, 'amber'],
+    ['T', .59, .68, .8, 'gold'],
     ['B', .72, .5, .6, 'amber'],
-    ['R', .25, .50, .7, 'gold'],
-    ['L', .55, .33, .95, 'gold'],
-    ['R', .93, .10, .55, 'lemon'],
-    ['L', .92, .84, .55, 'amber'],
-    ['R', .88, .86, .5, 'lemon']
+    ['L', .25, .26, .8, 'amber'],
+    ['R', .25, .80, .7, 'gold'],
+    ['R', .30, .14, .55, 'lemon'],
+    ['L', .40, .05, .6, 'lemon'],
+    ['R', .95, .30, .7, 'lemon'],
+    ['L', .70, .38, .7, 'gold'],
+    ['R', .10, .46, .6, 'amber'],
+    ['L', .10, .44, .55, 'lemon'],
+    ['R', .55, .95, .55, 'lemon'],
+    ['T', .30, .80, .6, 'amber']
   ];
-  let S, ctx, plan = [], lights = [], cache = new Map(), flare, clock = 0;
+  let S, ctx, plan = [], lights = [], cache = new Map(), flare, clock = 0, due = 0;
 
   const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
   const clamp01 = v => Math.max(0, Math.min(1, v));
@@ -253,25 +378,25 @@ const Lights = (() => {
       moon.x = x0 + (W - mr * 1.25 - x0) * i / 20; moon.y = y0 + (mr * 1.3 - y0) * i / 20;
     }
     const unit = 8.8 * Math.pow(U / 400, .85), cypress = Math.max(W * .24, 90);
-    const want = Math.round(Math.min(16, Math.max(9, 5 + Math.sqrt(W * H) / 110)));
+    const want = Math.round(Math.min(13, Math.max(9, 5.5 + Math.sqrt(W * H) / 180)));   // 手机约九颗，大屏到十三颗
     const bandH = Math.max(keep.t, U * .2), stars = [];
     plan = [];
     SLOTS.forEach(([zone, u, v, k, kind], id) => {
       const seed = rand() * 6.3;                               // 每个星位都取一次随机数，星星增减时其余的不变
       if (stars.length >= want || (kind === 'white' && plan.some(p => p.kind === 'white'))) return;
-      const r = unit * k, halo = r * (kind === 'white' ? 5 : 4.6), pad = r * 1.7 + 3, edge = r * 1.6 + 2;
+      const r = unit * k, halo = r * (kind === 'white' ? 5 : 4.6), pad = r * 1.7 + 3;
       let x, y, clear = true;
       if (zone === 'T') { x = u * W; y = v * bandH; clear = gap(x, y) >= pad; }
       else if (zone === 'B') { x = keep.l + u * (keep.r - keep.l); y = (keep.b + pad + H * .8 - halo * .5) / 2; clear = gap(x, y) >= pad; }
-      else {                                                   // 留白太窄时贴着屏幕边，露出半个光晕
-        const xin = edge + u * Math.max(0, (zone === 'L' ? keep.l : W - keep.r) - pad - edge);
+      else {                                                   // 留白窄时，有的星会被屏幕边裁掉一点光晕，像画框外还有天
+        const lo = r * .9, xin = lo + u * Math.max(0, (zone === 'L' ? keep.l : W - keep.r) - pad - lo);
         x = zone === 'L' ? xin : W - xin; y = v * horizon;
       }
       const ok = clear && y - r * 1.5 >= 2 && y + halo * .5 <= H * .8                          // 不出天空
         && Math.hypot(x - core.x, y - core.y) >= core.r + r * 1.5                              // 不进大数字的旋涡眼
         && !(x - r < cypress && y + r > H * .42)                                               // 不躲到柏树后面
         && Math.hypot(x - moon.x, y - moon.y) >= moon.halo * .72 + halo * .7
-        && stars.every(s => Math.hypot(x - s.x, y - s.y) >= (halo + s.halo) * .8);
+        && stars.every(s => Math.hypot(x - s.x, y - s.y) >= (halo + s.halo) * .72);
       if (!ok) return;
       stars.push({ x, y, r, halo, seed }); plan.push({ kind, id });
     });
@@ -285,87 +410,94 @@ const Lights = (() => {
     g.addColorStop(0, rgba(col, a)); g.addColorStop(.35, rgba(col, a * .78)); g.addColorStop(.68, rgba(col, a * .28)); g.addColorStop(1, rgba(col, 0));
     c.fillStyle = g; c.beginPath(); c.arc(x, y, rad, 0, TAU); c.fill();
   }
-  /* 一笔软边的色块：把柔光沿笔触方向拉长 */
-  function dab(c, x, y, len, wid, ang, col, a) {
-    c.save(); c.translate(x, y); c.rotate(ang); c.scale(1, wid / len); blob(c, 0, 0, len, col, a); c.restore();
+  /* 一圈柔和的色带：光晕里一层层的颜色 */
+  function band(c, rad, w, col, a) {
+    const g = c.createRadialGradient(0, 0, Math.max(0, rad - w), 0, 0, rad + w);
+    g.addColorStop(0, rgba(col, 0)); g.addColorStop(.5, rgba(col, a)); g.addColorStop(1, rgba(col, 0));
+    c.fillStyle = g; c.beginPath(); c.arc(0, 0, rad + w, 0, TAU); c.fill();
   }
   /* 几团略微错开的柔光叠在一起：轮廓不是正圆 */
   function lump(c, rand, n, off, rad, col, a) {
     for (let i = 0; i < n; i++) { const t = rand() * TAU, d = off * rand(); blob(c, Math.cos(t) * d, Math.sin(t) * d, rad * (.88 + .24 * rand()), col, a); }
   }
-  /* 绕着光源一圈圈的软笔触，颜色随半径从暖到冷 */
-  function swirl(c, rand, p, from, to, halo, size, turn) {
-    for (let q = from; q < to; q += .1 + .03 * rand()) {
-      const n = Math.max(4, Math.round(TAU * q * halo / (size * 4.6))), a0 = rand() * TAU;
-      for (let i = 0; i < n; i++) {
-        if (rand() < .14) continue;                             // 留些空隙
-        const t = a0 + (i + rand() * .6) / n * TAU, rho = q * halo * (1 + .1 * (rand() - .5));
-        const band = Math.min(5, Math.floor(1 + q * 5.4 + rand() * 1.3)), col = p[band];
-        const len = Math.min(rho * .5, size * (1.1 + .9 * rand())), wid = size * (.28 + .16 * rand());
-        dab(c, Math.cos(t) * rho, Math.sin(t) * rho, len, wid, t + Math.PI / 2 + turn, col, (.62 - .5 * q) * (.55 + .5 * rand()));
-      }
+  /* 一笔：起笔处颜料厚、向后拖薄，边缘是软的；大一点的笔触上带一道笔毛的亮痕 */
+  function dab(c, x, y, len, wid, ang, col, a, bristle) {
+    c.save(); c.translate(x, y); c.rotate(ang); c.scale(1, wid / len);
+    const g = c.createRadialGradient(len * .35, 0, 0, 0, 0, len);
+    g.addColorStop(0, rgba(col, a)); g.addColorStop(.55, rgba(col, a * .75)); g.addColorStop(1, rgba(col, 0));
+    c.fillStyle = g; c.beginPath(); c.arc(0, 0, len, 0, TAU); c.fill();
+    if (bristle) { c.fillStyle = rgba('#fffbe8', a * .45); c.fillRect(-len * .6, -len * .22, len * 1.1, len * .14); }
+    c.restore();
+  }
+  /* 顺着光晕绕圈的笔触：半径随机（不排成整齐的圈），颜色由内向外从暖到冷 */
+  function strokes(c, rand, p, from, to, halo, size, turn, n) {
+    for (let i = 0; i < n; i++) {
+      const q = from + (to - from) * Math.sqrt(rand()), t = rand() * TAU, rho = q * halo;
+      const col = p[Math.min(6, Math.max(1, Math.round(1 + (q - from) / (to - from) * 4.6 + (rand() - .5) * 1.6)))];
+      const len = Math.min(rho * .55, size * (1 + .9 * rand())), wid = size * (.3 + .18 * rand());
+      dab(c, Math.cos(t) * rho, Math.sin(t) * rho, len, wid, t + Math.PI / 2 + turn + (rand() - .5) * .3, col, (.55 - .4 * q) * (.6 + .5 * rand()), len > 7);
     }
   }
-  function sprite(half, paint) {
-    const cv = document.createElement('canvas'), px = Math.ceil(half * S.dpr);
+  /* 画一张贴图：柔光部分分辨率封顶，省内存；月面要清楚，用满分辨率 */
+  function sprite(half, paint, sharp) {
+    const k = sharp ? S.dpr : Math.min(S.dpr, 192 / half), px = Math.ceil(half * k), cv = document.createElement('canvas');
     cv.width = cv.height = px * 2;
-    const c = cv.getContext('2d'); c.setTransform(S.dpr, 0, 0, S.dpr, px, px);
+    const c = cv.getContext('2d'); c.setTransform(k, 0, 0, k, px, px);
     paint(c);
-    return { cv, half: px / S.dpr };
+    return { cv, half: px / k };
   }
 
-  /* 一颗星：冷色薄纱 → 暖色光 → 一圈圈软笔触 → 厚涂的亮核 */
+  /* 一颗星：冷色薄纱 → 淡绿 → 橙 → 铬黄 → 绕圈的笔触 → 厚涂的亮核 */
   function paintStar(c, L, rand) {
     const { r, halo } = L, p = PAL[L.kind], white = L.kind === 'white';
     c.rotate(rand() * TAU); c.scale(1, .9 + .1 * rand());      // 每颗星略扁一点、朝向不同
-    lump(c, rand, 4, halo * .1, halo * .92, p[6], .13);
-    lump(c, rand, 3, halo * .1, halo * .78, p[5], .16);
-    lump(c, rand, 3, halo * .08, halo * .62, p[4], .22);
-    lump(c, rand, 2, halo * .05, halo * .47, p[3], white ? .1 : .22);
-    lump(c, rand, 2, halo * .04, halo * .4, p[2], .5);
-    blob(c, 0, 0, halo * .3, p[1], .7);
-    swirl(c, rand, p, .27, .93, halo, r, L.spin * .16);
-    // 亮核：几笔叠出来的一小块厚颜料
-    blob(c, 0, 0, r * 1.8, p[1], .6);
-    for (let i = 0; i < 5; i++) { const t = rand() * TAU; dab(c, Math.cos(t) * r * .35, Math.sin(t) * r * .35, r * .85, r * .6, rand() * TAU, p[0], .8); }
-    const g = c.createRadialGradient(0, 0, 0, 0, 0, r * 1.08);
-    g.addColorStop(0, p[0]); g.addColorStop(.62, p[0]); g.addColorStop(1, rgba(p[0], 0));
-    c.fillStyle = g; c.beginPath(); c.arc(0, 0, r * 1.08, 0, TAU); c.fill();
-    blob(c, -r * .15, -r * .2, r * .55, '#ffffff', .9);
+    lump(c, rand, 4, halo * .1, halo * .95, p[6], .09);
+    band(c, halo * .7, halo * .2, p[5], .13);
+    band(c, halo * .52, halo * .16, p[4], .2);
+    band(c, halo * .37, halo * .13, p[3], white ? .12 : .26);
+    lump(c, rand, 3, halo * .05, halo * .42, p[2], .42);
+    lump(c, rand, 2, halo * .03, halo * .28, p[1], .55);
+    strokes(c, rand, p, .24, .92, halo, r, L.spin * .18, Math.round(64 + halo / 3));
+    // 亮核：铬黄的底，几笔绕着核心的短弧，再叠上奶白的厚颜料
+    lump(c, rand, 3, r * .2, r * 2.1, p[2], .55);
+    for (let i = 0; i < 7; i++) { const t = rand() * TAU, d = r * (1 + .4 * rand()); dab(c, Math.cos(t) * d, Math.sin(t) * d, r * .9, r * .38, t + Math.PI / 2, p[i % 2 + 1], .75, false); }
+    for (let i = 0; i < 6; i++) { const t = rand() * TAU, d = r * .35 * rand(); dab(c, Math.cos(t) * d, Math.sin(t) * d, r * .95, r * .62, rand() * TAU, p[0], .9, false); }
+    blob(c, 0, 0, r * 1.05, p[0], .85);
+    blob(c, -r * .12, -r * .18, r * .5, '#ffffff', white ? 1 : .75);
   }
 
   /* 月晕：天上最大、最浓的一团光（不含月牙，方便单独转动） */
   function paintMoonHalo(c, L, rand) {
     const { r, halo } = L, p = PAL.moon;
-    lump(c, rand, 5, halo * .06, halo * .95, p[6], .14);
-    lump(c, rand, 4, halo * .06, halo * .82, p[5], .18);
-    lump(c, rand, 3, halo * .05, halo * .68, p[4], .26);
-    lump(c, rand, 3, halo * .04, halo * .56, p[3], .22);
-    lump(c, rand, 2, halo * .03, halo * .5, p[2], .5);
-    lump(c, rand, 2, halo * .02, halo * .42, p[1], .75);
-    swirl(c, rand, p, .36, .95, halo, r * .34, L.spin * .14);
+    lump(c, rand, 5, halo * .06, halo * .97, p[6], .13);
+    band(c, halo * .76, halo * .18, p[5], .16);
+    band(c, halo * .6, halo * .15, p[4], .24);
+    band(c, halo * .47, halo * .12, p[3], .3);
+    lump(c, rand, 3, halo * .03, halo * .48, p[2], .45);
+    lump(c, rand, 2, halo * .02, halo * .4, p[1], .7);
+    strokes(c, rand, p, .38, .95, halo, r * .34, L.spin * .14, 150);
+    blob(c, 0, 0, r * 1.5, p[0], .5);
   }
-  /* 月面：淡黄绿的暗面 + 橙金色的月牙，月牙上顺着弧线拖出笔毛的痕迹 */
+  /* 月面：月牙怀里一团淡黄的光 + 橙金色的月牙，月牙上顺着弧线有笔毛的痕迹 */
   function paintMoonDisc(c, L, rand) {
-    const R = L.r, d = R * .46, q = R * .87;
+    const R = L.r, d = R * .5, q = R * .84;
     c.rotate(-.32);
     const x0 = (d * d + R * R - q * q) / (2 * d), y0 = Math.sqrt(R * R - x0 * x0), al = Math.atan2(y0, x0), be = Math.atan2(y0, x0 - d);
     const f1 = rand() * TAU, f2 = rand() * TAU, wob = a => 1 + .016 * Math.sin(a * 5 + f1) + .011 * Math.sin(a * 9 + f2);
-    blob(c, d * .8, 0, q * 1.12, '#f6ee9e', .85);              // 月牙怀里的亮面
-    for (let i = 0; i < 9; i++) { const t = rand() * TAU, k = q * (.2 + .5 * rand()); dab(c, d + Math.cos(t) * k, Math.sin(t) * k, R * .3, R * .1, t + Math.PI / 2, i % 2 ? '#fff6c2' : '#dde8a0', .4); }
+    blob(c, d * .8, 0, q * 1.12, '#f8eea0', .8);
+    for (let i = 0; i < 10; i++) { const t = rand() * TAU, k = q * (.2 + .55 * rand()); dab(c, d + Math.cos(t) * k, Math.sin(t) * k, R * .3, R * .1, t + Math.PI / 2, i % 2 ? '#fff6c2' : '#e2eaa2', .45, false); }
     c.save();
     c.beginPath();
     for (let i = 0; i <= 48; i++) { const a = al + (TAU - 2 * al) * i / 48, k = R * wob(a); c.lineTo(Math.cos(a) * k, Math.sin(a) * k); }
     for (let i = 0; i <= 48; i++) { const a = TAU - be - (TAU - 2 * be) * i / 48, k = q * wob(a + 2); c.lineTo(d + Math.cos(a) * k, Math.sin(a) * k); }
     c.closePath(); c.clip();
     const g = c.createLinearGradient(-R, -R * .7, R * .2, R);
-    g.addColorStop(0, '#ffc23c'); g.addColorStop(.55, '#fbab26'); g.addColorStop(1, '#ee8a16');
+    g.addColorStop(0, '#ffc63e'); g.addColorStop(.5, '#fbaa24'); g.addColorStop(1, '#ea8414');
     c.fillStyle = g; c.fillRect(-R * 1.1, -R * 1.1, R * 2.2, R * 2.2);
     c.lineCap = 'round';
-    for (let i = 0; i < 46; i++) {                              // 笔触：夹在内外两条弧之间的一族圆弧
+    for (let i = 0; i < 54; i++) {                              // 笔触：夹在内外两条弧之间的一族圆弧
       const f = rand(), rad = R + (q - R) * f, mid = Math.PI + (rand() - .5) * 3.6, span = .16 + .34 * rand();
-      const lightSide = Math.sin(mid) < 0 ? .25 : 0, col = CRESCENT[Math.floor(rand() * 6 - lightSide * 4 + 6) % 6 | 0];
-      c.globalAlpha = .35 + .4 * rand(); c.strokeStyle = col; c.lineWidth = R * (.05 + .07 * rand());
+      c.globalAlpha = .35 + .4 * rand(); c.strokeStyle = CRESCENT[Math.floor(rand() * 6)]; c.lineWidth = R * (.05 + .07 * rand());
       c.beginPath(); c.arc(d * f, 0, rad, mid - span, mid + span); c.stroke();
       c.globalAlpha *= .5; c.strokeStyle = '#fff0b4'; c.lineWidth = R * .018;      // 厚涂：笔触上缘的一线亮
       c.beginPath(); c.arc(d * f - R * .02, -R * .025, rad, mid - span * .8, mid + span * .6); c.stroke();
@@ -380,20 +512,20 @@ const Lights = (() => {
   function init(scene) {
     S = scene; ctx = $('lights').getContext('2d');
     const old = cache; cache = new Map();
-    const make = (key, half, paint) => { const sp = old.get(key) || sprite(half, paint); cache.set(key, sp); return sp; };
-    flare = make('flare' + S.dpr, 24, c => blob(c, 0, 0, 24, '#fff8dc', 1));
-    // 入场次序：从长庚星（或左下）开始，一颗颗亮过去，月亮最后
+    const make = (key, half, paint, sharp) => { key += '|' + S.dpr; const sp = old.get(key) || sprite(half, paint, sharp); cache.set(key, sp); return sp; };
+    flare = make('flare', 24, c => blob(c, 0, 0, 24, '#fff8dc', 1));
+    // 入场次序：从长庚星（没有就从左下）开始，一颗颗亮过去，月亮最后
     const first = S.stars[plan.findIndex(p => p.kind === 'white')] || { x: 0, y: S.H };
     const order = S.stars.map((s, i) => [Math.hypot(s.x - first.x, s.y - first.y), i]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
     lights = S.stars.map((s, i) => {
       const { kind, id } = plan[i], rand = rng(977 + id * 131), spin = i % 2 ? 1 : -1;      // 与天空的旋向一致：奇数顺时针
       const L = { ...s, kind, spin, born: 300 + 1050 * order.indexOf(i) / Math.max(1, S.stars.length) };
-      L.glow = make([kind, id, s.r.toFixed(2), S.dpr].join(), s.halo * 1.08 + 2, c => paintStar(c, L, rand));
+      L.glow = make([kind, id, s.r.toFixed(2), spin].join(), s.halo * 1.08 + 2, c => paintStar(c, L, rand));
       return L;
     });
     const m = S.moon, rand = rng(4201), M = { ...m, kind: 'moon', spin: -1, seed: 1.7, born: 1300 };
-    M.glow = make(['moonHalo', m.r.toFixed(2), S.dpr].join(), m.halo * 1.06 + 2, c => paintMoonHalo(c, M, rand));
-    M.disc = make(['moonDisc', m.r.toFixed(2), S.dpr].join(), m.r * 1.5, c => paintMoonDisc(c, M, rand));
+    M.glow = make('moonHalo' + m.r.toFixed(2), m.halo * 1.06 + 2, c => paintMoonHalo(c, M, rand));
+    M.disc = make('moonDisc' + m.r.toFixed(2), m.r * 1.5, c => paintMoonDisc(c, M, rand), true);
     lights.push(M);
     for (const L of lights) {                                   // 各有各的节奏
       const r = rng(31 + Math.round(L.seed * 1000));
@@ -412,16 +544,20 @@ const Lights = (() => {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.clearRect(0, 0, S.W * S.dpr, S.H * S.dpr);
     for (const L of lights) {
       const k = clamp01((age - L.born) / 550), lit = k * k * (3 - 2 * k);                    // 入场：由暗到亮
-      const breath = Math.sin(clock * L.w1 + L.seed), tw = Math.max(0, Math.sin(clock * L.w2 + L.seed * 2) * Math.sin(clock * L.w3 + L.seed * 3));
-      ctx.globalCompositeOperation = 'source-over';
+      const breath = Math.sin(clock * L.w1 + L.seed);
       put(L.glow, L.x, L.y, (.9 + .1 * lit) * (1 + .03 * breath), clock * L.turn, (.5 + .5 * lit) * (.93 + .07 * breath));
-      if (L.disc) put(L.disc, L.x, L.y, 1, 0, .7 + .3 * lit);
-      ctx.globalCompositeOperation = 'lighter';                 // 星核的一点闪烁
-      put(flare, L.x, L.y, L.r * (L.disc ? 0 : .085) * (1 + .5 * tw), 0, lit * (.12 + .3 * tw) + .5 * Math.sin(k * Math.PI));
+      if (L.disc) { put(L.disc, L.x, L.y, 1, 0, .7 + .3 * lit); continue; }
+      const tw = Math.max(0, Math.sin(clock * L.w2 + L.seed * 2) * Math.sin(clock * L.w3 + L.seed * 3));
+      ctx.globalCompositeOperation = 'lighter';                 // 星核的一点闪烁；刚亮起时闪一下
+      put(flare, L.x, L.y, L.r * .085 * (1 + .5 * tw), 0, lit * (.12 + .3 * tw) + .5 * Math.sin(k * Math.PI));
+      ctx.globalCompositeOperation = 'source-over';
     }
-    ctx.globalCompositeOperation = 'source-over';
   }
-  function frame(t, dt) { clock += dt; paint(); }
+  /* 星光动得极慢：入场时每帧都画，之后约 16 次/秒就足够平滑，省下手机上整张画布的光栅化 */
+  function frame(t, dt) {
+    clock += dt; due -= dt;
+    if (S.age < 2200 || due <= 0) { paint(); due = 60; }
+  }
   return { compose, init, frame };
 })();
 
@@ -443,13 +579,13 @@ const Land = (() => {
   const FIELD = inks(['#060d1c', '#081424', '#0a1b2c', '#0c2431', '#0e1a36', '#113038'], '#a8d0d8', .16);   // 最前面的田野
   const GLINT = inks(['#7fa3dc', '#9dbde8', '#7cc4cf', '#b4cdee']);                                          // 接住月光的几笔
   const LINE = ink('#090e2e', '#5a78c0', .25);                                                               // 勾山脊、勾房子的深线
-  const WALL = inks(['#22315f', '#2a3c72', '#324884', '#3b5494', '#4863a4', '#5a78b4', '#7890c4'], '#e6eefb', .22);
+  const WALL = inks(['#22315f', '#2a3a6e', '#30447e', '#384f8c', '#42599a', '#4f68a8'], '#dfe8fa', .24);
   const ROOF = inks(['#131b40', '#18254e', '#1e3258', '#263566', '#172f48'], '#c8d8f4', .2);
   const LEAF = inks(['#09171a', '#0c2420', '#113026', '#163f30', '#1f4e38'], '#c8d890', .22);               // 村里的树
-  const BLACK = inks(['#050a0b', '#08100f', '#090f14', '#0b1611'], '#7d8048', .3);                          // 柏树：近黑的绿
-  const UMBER = inks(['#1c130a', '#281a0e', '#332211', '#3e2a16'], '#a88a4c', .26);                         // 柏树：棕褐
-  const GREEN = inks(['#0c2218', '#102c1e', '#153825', '#1a442b'], '#9aa658', .26);                         // 柏树：深绿
-  const OLIVE = inks(['#333d1c', '#414b22', '#505628', '#5c5a2a'], '#d8cf88', .26);                         // 柏树：受光的橄榄绿
+  const BLACK = inks(['#050a0b', '#08100f', '#090f14', '#0b1611'], '#6d7040', .22);                          // 柏树：近黑的绿
+  const UMBER = inks(['#1a1209', '#24180d', '#2e1f10', '#382614'], '#98804a', .2);                         // 柏树：棕褐
+  const GREEN = inks(['#0b1f16', '#0f281c', '#133222', '#183d28'], '#8a9850', .2);                         // 柏树：深绿
+  const OLIVE = inks(['#2c3519', '#38411e', '#454b22', '#525226'], '#c8c080', .2);                         // 柏树：受光的橄榄绿
 
   let S, ctx, u = 1;                    // u：笔触大小的比例（跟着屏幕高度走）
   let patch, glow, tipImg;              // 缓存：村庄一带的底图、亮着的窗、柏树上半截
@@ -502,7 +638,7 @@ const Land = (() => {
     c.fillStyle = o.under; c.beginPath(); c.moveTo(-9, H + 9);
     for (let x = -9; x <= W + 9; x += 5) c.lineTo(x, f(x) + w * .35);
     c.lineTo(W + 9, H + 9); c.fill();
-    const g = (x, r) => f(x) + (r + .6) * gap * (1 + (o.swell || 0) * Math.sin(x / (H * .3) + o.seed));
+    const g = (x, r) => f(x) + (r + .6) * gap + r * gap * (o.swell || 0) * Math.sin(x / (H * .22) + o.seed + r * .07);
     for (let r = 0; r < rows; r++) {
       const rr = rng(o.seed * 131 + r);
       for (let x = -rr() * 24 * u - w * 2; x < W + w;) {
@@ -566,7 +702,7 @@ const Land = (() => {
       line(c, xl + a, ry, xr - b, ry, lw * 1.1, LINE); line(c, xr - b, ry, xr + e, tr, lw, LINE);
     }
     if (rand() < (back ? .5 : .85)) {                    // 窗：先画成熄着的深色；亮的那些另记下来
-      const ww = Math.max(2.2 * u, w * .2), wh = Math.max(2.8 * u, h * .36), wx = xl + (xr - xl) * (.28 + rand() * .44), wy = y - h * (.5 + rand() * .1);
+      const ww = Math.max(2.6 * u, w * .22), wh = Math.max(3.2 * u, h * .38), wx = xl + (xr - xl) * (.28 + rand() * .44), wy = y - h * (.5 + rand() * .1);
       poly(c, '#0c1535', [[wx - ww / 2, wy - wh / 2], [wx + ww / 2, wy - wh / 2 + j() * .3], [wx + ww / 2, wy + wh / 2], [wx - ww / 2, wy + wh / 2]]);
       if (canLight && rand() < (back ? .55 : .8)) wins.push({ x: wx, y: wy, w: ww, h: wh, tilt: j() * .3, warm: rand(), ph: rand() * TAU });
     }
@@ -593,30 +729,34 @@ const Land = (() => {
     line(c, x - 1.2 * u, y - th, ax - .2 * u, tipY - 2 * u, lw, LINE); line(c, x - 1.6 * u, y - th, x + tw + 1.6 * u, y - th, lw * 1.2, LINE);
   }
 
-  /* 柏树：一团向上舔的深色火焰。先铺近黑的底，再用一长条一长条互相缠绕、向上卷的笔触织出来 */
+  /* 柏树：一团向上舔的深色火焰。先铺近黑的底，再用一条条从里向外、向上卷起的长笔触织出来，像一束束火舌 */
   function cypress(c, cx, top, base, hw, seed, n) {
-    const rand = rng(seed), hC = base - top, m = 12;
-    const axis = k => cx + hw * (.3 * Math.sin(k * 4.4 + .9 + seed) + .1) * (1 - k);
-    const prof = k => Math.pow(Math.sin(Math.min(1, k / .78) * Math.PI / 2), .85) * (1 - .14 * Math.max(0, (k - .78) / .22));
-    const lick = (k, ph) => 1 + .2 * (.5 - (k * 7.3 + ph) % 1) + .07 * Math.sin(k * 31 + ph * 5);      // 锯齿形的边：一条条火舌
-    c.fillStyle = '#060c0d'; c.beginPath();
-    for (let i = 0; i <= 80; i++) { const k = i / 80; c.lineTo(axis(k) - hw * prof(k) * lick(k, .2), top + k * hC); }
-    for (let i = 80; i >= 0; i--) { const k = i / 80; c.lineTo(axis(k) + hw * prof(k) * lick(k, .63), top + k * hC); }
+    const rand = rng(seed), hC = base - top, m = 14;
+    const axis = k => cx + hw * (.42 * Math.sin(k * 4.2 + .9 + seed) * (1 - k) + .12 * Math.sin(k * 11 + seed) * (1 - k) * (1 - k));
+    const prof = k => Math.pow(Math.sin(Math.min(1, k / .8) * Math.PI / 2), .78) * (1 - .12 * Math.max(0, (k - .8) / .2));
+    /* 左右两边各自起伏：几处鼓出的火团，加上一条条向上的火舌 */
+    const edge = (k, s) => prof(k) * (1 + .16 * Math.sin(k * 15.5 + s * 2.1 + seed) + .07 * Math.sin(k * 34 + s * 4 + seed)) *
+      (1 + .2 * Math.pow(Math.sin(Math.PI * Math.pow((k * 6.3 + s * .43 + .4 * Math.sin(k * 13)) % 1, .6)), 2) - .08);
+    c.fillStyle = '#050a0b'; c.beginPath();
+    for (let i = 0; i <= 100; i++) { const k = i / 100; c.lineTo(axis(k) - hw * edge(k, 0), top + k * hC); }
+    for (let i = 100; i >= 0; i--) { const k = i / 100; c.lineTo(axis(k) + hw * edge(k, 1), top + k * hC); }
     c.fill();
     for (let i = 0; i < n; i++) {
-      const late = i > n * .7;                                         // 后三成是提亮和收拾的笔触，压在上面
-      const k0 = .07 + Math.pow(rand(), .85) * .98, o0 = (rand() * 2 - 1) * .9, dk = (.12 + rand() * .2) * (.5 + .5 * Math.min(1, k0 + .15));
-      const out = (o0 < 0 ? -1 : 1) * (rand() < .72 ? 1 : -.6), ph = rand() * TAU, wob = .08 + rand() * .16, stick = rand() * .75, pts = [];
+      const late = i > n * .72;                                        // 后面的笔触压在上面：少量提亮
+      const k0 = .04 + Math.pow(rand(), .8) * 1.0, dk = (.1 + rand() * .16) * (.45 + .55 * Math.min(1, k0 + .1));
+      const o0 = (rand() * 2 - 1) * .82, dir = o0 < 0 ? -1 : 1, sweep = (.2 + rand() * .5) * dir, curl = (rand() < .7 ? 1 : -.7) * (.25 + rand() * .35);
+      const ph = rand() * TAU, pts = [];
       for (let j = 0; j <= m; j++) {
         const t = j / m, k = k0 - dk * t;
         if (k < 0) break;
-        const p = prof(k) + (prof(Math.min(1, k0)) - prof(k)) * stick * t;
-        pts.push([axis(k) + (o0 + wob * Math.sin(t * 4.4 + ph) + out * .45 * t * t * t) * p * hw, top + k * hC]);
+        /* 先顺着树身往外斜着走，到末端再卷回来：像火苗被风吹起又弯下 */
+        const o = clamp(o0 + sweep * Math.sin(t * Math.PI * .8) + curl * dir * t * t * t + .06 * Math.sin(t * 6 + ph), -1.2, 1.2);
+        pts.push([axis(k) + o * edge(k, o < 0 ? 0 : 1) * hw, top + k * hC]);
       }
       if (pts.length < 5) continue;
-      const side = o0 * .5 + .5, r = rand();                           // 右边朝月亮：多一点绿和橄榄色；左边多黑和褐
-      const pal = late ? (r < .2 + side * .3 ? OLIVE : r < .72 ? GREEN : BLACK) : (r < .44 - side * .14 ? BLACK : r < .74 - side * .1 ? UMBER : GREEN);
-      brush(c, pts, (late ? 2.4 + rand() * 2.6 : 3.4 + rand() * 3.6) * u, pal[rand() * pal.length | 0], .85);
+      const side = o0 * .5 + .5, r = rand();                           // 右边朝月亮：多一点绿、零星橄榄色；左边多黑和褐
+      const pal = late ? (r < .06 + side * .16 ? OLIVE : r < .6 ? GREEN : BLACK) : (r < .46 - side * .12 ? BLACK : r < .74 - side * .08 ? UMBER : GREEN);
+      brush(c, pts, (late ? 2.6 + rand() * 2.4 : 3.8 + rand() * 3.8) * u, pal[rand() * pal.length | 0], .85);
     }
   }
 
@@ -629,7 +769,7 @@ const Land = (() => {
     c.clearRect(0, 0, W, H);
     u = clamp(H / 860, .6, 1.45);
     const hs = 16 * u, chx = W * (W > H ? .64 : .6);                  // 房子的基本尺寸；教堂的位置（避开正中的文字）
-    const lim = Math.max(W * .24, 90), top = H * .45, wc = Math.min(lim - 10, (H - top) * .36), cx0 = clamp(W * .045, 4, lim - wc - 6);   // 柏树占的那一条
+    const lim = Math.max(W * .24, 90), top = H * .425, wc = Math.min(lim - 10, (H - top) * .36), cx0 = clamp(W * .045, 4, lim - wc - 6);   // 柏树占的那一条
 
     /* 山形：几道略向一侧倾倒的浪，整体向右升高，在教堂后面低下去让尖顶露出来 */
     const wave = (x, len, ph) => { const p = x / len * TAU + ph; return Math.sin(p + .55 * Math.sin(p)); };
@@ -660,9 +800,8 @@ const Land = (() => {
       }
       if (back && dir > 0) church(c, chx, ground(chx + hs), hs, H * .806);
     }
-    ridge(c, ground, { seed: 53, w: 5.4 * u, depth: H * .11, under: '#060d1c', inks: FIELD, swell: .3, line: 2.4 });
-    const rb = rng(61);
-    for (let x = W * .34 + rb() * hs; x < W + hs; x += hs * (1.6 + rb() * 3.2)) bush(c, x, H * (.945 + rb() * .05), hs * (.7 + rb() * .8), rb, GROVE);
+    ridge(c, ground, { seed: 53, w: 5.4 * u, depth: H * .06, under: '#060d1c', inks: FIELD, swell: .35, line: 2.4 });
+    ridge(c, x => H * (.952 + .012 * wave(x, H * .58, .4) + .004 * wave(x, H * .19, 3)), { seed: 59, w: 5.8 * u, depth: H * .06, under: '#050b18', inks: FIELD, swell: .3, line: 2.2 });
 
     /* 柏树：一高一矮两团 */
     cypress(c, cx0 + wc * .76, H * .68, H + 6, wc * .2, 2, 46);
@@ -676,14 +815,14 @@ const Land = (() => {
     tipImg.getContext('2d').drawImage(land, 0, tip.y, tip.w, tip.h, 0, 0, tip.w, tip.h);
     band = null;
     if (wins.length) {
-      const halo = 9 * u, y0 = Math.floor((Math.min(...wins.map(w => w.y)) - halo) * dpr), y1 = Math.ceil((Math.max(...wins.map(w => w.y)) + halo * 1.3) * dpr);
+      const halo = 11 * u, y0 = Math.floor((Math.min(...wins.map(w => w.y)) - halo) * dpr), y1 = Math.ceil((Math.max(...wins.map(w => w.y)) + halo * 1.3) * dpr);
       band = { y: y0, h: y1 - y0, w: Wd };
       patch = sized(patch, band.w, band.h); glow = sized(glow, band.w, band.h);
       patch.getContext('2d').drawImage(land, 0, band.y, band.w, band.h, 0, 0, band.w, band.h);
       const g = glow.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, -band.y);
       wins.forEach((w, i) => {
         const r = halo * (.8 + w.warm * .4), gr = g.createRadialGradient(w.x, w.y, 0, w.x, w.y, r);
-        gr.addColorStop(0, 'rgba(255,186,86,.5)'); gr.addColorStop(.35, 'rgba(255,150,50,.2)'); gr.addColorStop(1, 'rgba(255,120,30,0)');
+        gr.addColorStop(0, 'rgba(255,170,70,.36)'); gr.addColorStop(.3, 'rgba(240,130,40,.15)'); gr.addColorStop(1, 'rgba(200,90,20,0)');
         g.fillStyle = gr; g.fillRect(w.x - r, w.y - r, r * 2, r * 2);
         poly(g, w.warm < .4 ? '#f79a2b' : w.warm < .75 ? '#ffb23a' : '#ffc95a', [[w.x - w.w / 2, w.y - w.h / 2], [w.x + w.w / 2, w.y - w.h / 2 + w.tilt], [w.x + w.w / 2, w.y + w.h / 2], [w.x - w.w / 2, w.y + w.h / 2]]);
         poly(g, '#ffe9a6', [[w.x - w.w * .2, w.y - w.h * .3], [w.x + w.w * .25, w.y - w.h * .3], [w.x + w.w * .2, w.y + w.h * .12], [w.x - w.w * .2, w.y + w.h * .12]]);
@@ -726,7 +865,7 @@ const Land = (() => {
   return { init, frame };
 })();
 
-/* ── 天空：一幅缓缓流动的油画。底层在 init 时一次画满并缓存；上层几百笔沿流场慢慢滑动 ── */
+/* ── 天空：一幅缓缓流动的油画。底层在 init 时一次画满并缓存；上层一两百笔沿流场慢慢滑动 ── */
 const Sky = (() => {
   /* 调色板：蓝色主阶由深到浅；紫与青绿是点缀；暖色阶只用在星月的光晕里（由内到外：橙、黄、奶油、淡绿、青） */
   const BLUE = ['#0a1433', '#0f1f52', '#162c78', '#1d3c9e', '#2550b8', '#2f68c4', '#3f86cf', '#62a8d8', '#93c9dc', '#cfe6ec'];
@@ -735,14 +874,14 @@ const Sky = (() => {
   const WARM = ['#e8801a', '#f2a824', '#f7c93a', '#f5e08a', '#e2e4a4', '#b9dbae', '#8fcfc4'];
   const COLORS = [...BLUE, ...VIOLET, ...TEAL, ...WARM].map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
   const CREAM = [255, 249, 224], PALE = [172, 208, 242], DARK = [5, 9, 28];
-  const VAR = 4, LEN = 5, PAD = .5;          // 每种颜色几种笔形；笔触长宽比；贴图留边（单位都是笔宽 u）
+  const VAR = 4, LEN = 5, PX = .15, PY = .3;   // 每种颜色几种笔形；笔触长宽比；贴图左右、上下留边（单位都是笔宽 u）
   const FADE = 1600;                         // 上层笔触淡入、淡出各用多少 ms
   const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
   const css = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
   const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
   let S, ctx, base, atlas, u, cw, ch, top, speed, dabs = [], vort = [], stirs = [], tick = 0, bound = false;
-  let fpsi, fvx, fvy, fwarm, fq, fr, fv, fband;         // flow() / pick() 的输出，放在外面免得每次新建对象
+  let fpsi, fvx, fvy, fwarm, fq, fr, fv, fband, fcalm;         // flow() / pick() 的输出，放在外面免得每次新建对象
 
   /* 流场：流函数 ψ = 自左向右的风 + 两道大起伏 + 各个旋涡。速度取 ψ 的梯度转 90°，天然无散，笔触不会越聚越密 */
   function flow(x, y) {
@@ -774,7 +913,7 @@ const Sky = (() => {
     const hy = (y - horizon + H * .045) / (H * .06), dc = Math.hypot(x - core.x, y - core.y) / core.r;
     const col = Math.abs(x - (box.left + box.right) / 2) / ((box.right - box.left) / 2);
     const end = Math.max(box.top - y, y - box.bottom) / (8 * u);
-    const calm = Math.max(1 - smooth(.4, .8, dc), (1 - smooth(.5, 1.05, col)) * (1 - smooth(0, 1, end)));   // 文字所在的中间一列
+    const calm = fcalm = Math.max(1 - smooth(.4, .8, dc), (1 - smooth(.5, 1.05, col)) * (1 - smooth(0, 1, end)));   // 文字所在的中间一列
     fwarm *= 1 - .7 * calm;
     const v = .36 + .25 * fband + .2 * smooth(.5, .8, dc) * (1 - smooth(1, 1.5, dc)) + .4 * Math.exp(-hy * hy) + .3 * fwarm;
     return v * (1 - .5 * calm) - .02 * calm;
@@ -785,10 +924,10 @@ const Sky = (() => {
     flow(x, y);
     fv = tone(x, y) + lift + (rand() - .5) * .1;
     if (deep) fv = Math.min(fv, .4);
-    else if (rand() < fwarm * (.6 + .3 * fband)) return 16 + Math.max(0, Math.min(6, Math.floor(fq * 7.5 - 1 + rand() * 2.4)));
+    else if (rand() < fwarm * (.75 + .25 * fband)) return 16 + Math.max(0, Math.min(6, Math.floor(fq * 7.5 - 1 + rand() * 2.4)));
     const i = Math.max(1, Math.min(9, Math.round(fv * 9))), r = rand();
     const hue = Math.sin(x / (21 * u) + 2 * Math.sin(y / (15 * u)));     // 紫与青绿成片出现，而不是满天撒
-    if (r < (hue < -.5 ? .4 : .05) && i < 8) return 10 + ((i - 2) >> 1);
+    if (r < (hue < -.5 ? .4 : .05) && i > 1 && i < 8) return 10 + ((i - 2) >> 1);
     if (r > (hue > .5 || fwarm > .15 ? .62 : .95) && i > 3) return 13 + ((i - 4) >> 1);
     return i;
   }
@@ -797,7 +936,7 @@ const Sky = (() => {
 
   /* 一笔：一撮鬃毛并排拖出去，略带弧度——起笔饱满，收笔参差变干，两侧的毛短而淡；上缘受光提亮，下缘压暗（厚涂） */
   function drawDab(a, col, rand) {
-    const n = 9, bend = (rand() - .5) * .5, hi = col[2] > col[0] ? PALE : CREAM;   // 蓝色提亮成浅蓝，暖色提亮成奶油
+    const n = 9, bend = (rand() - .5) * .4, hi = col[2] > col[0] ? PALE : CREAM;   // 蓝色提亮成浅蓝，暖色提亮成奶油
     a.lineCap = 'round'; a.lineWidth = .2;
     for (let i = 0; i < n; i++) {
       const t = i / (n - 1) - .5, mid = 1 - 4 * t * t;
@@ -819,26 +958,27 @@ const Sky = (() => {
   }
   function makeAtlas() {
     const k = u * S.dpr, rand = rng(5);
-    cw = Math.ceil((LEN + 2 * PAD) * k); ch = Math.ceil((1 + 2 * PAD) * k);
-    atlas = document.createElement('canvas'); atlas.width = cw * VAR; atlas.height = ch * COLORS.length;
+    cw = Math.ceil((LEN + 2 * PX) * k); ch = Math.ceil((1 + 2 * PY) * k);   // 留边越少，每帧要贴的像素越少
+    atlas = atlas || document.createElement('canvas');      // 重排时复用画布（iOS 对画布总内存有上限）
+    atlas.width = cw * VAR; atlas.height = ch * COLORS.length;
     const a = atlas.getContext('2d');
     COLORS.forEach((col, row) => {
-      for (let i = 0; i < VAR; i++) { a.setTransform(k, 0, 0, k, i * cw + PAD * k, row * ch + ch / 2); drawDab(a, col, rand); }
+      for (let i = 0; i < VAR; i++) { a.setTransform(k, 0, 0, k, i * cw + PX * k, row * ch + ch / 2); drawDab(a, col, rand); }
     });
   }
   /* 把一笔贴到画布 c 上：(x, y) 是笔触中心，(co, si) 是方向。亮边永远朝向左上方的光 */
   function put(c, x, y, co, si, sx, sy, row, vr) {
     const f = co - si > 0 ? sy : -sy, k = S.dpr;
     c.setTransform(co * sx, si * sx, -si * f, co * f, x * k, y * k);
-    c.drawImage(atlas, vr * cw, row * ch, cw, ch, -LEN / 2 * u * k - PAD * u * k, -ch / 2, cw, ch);
+    c.drawImage(atlas, vr * cw, row * ch, cw, ch, -(LEN / 2 + PX) * u * k, -ch / 2, cw, ch);
   }
 
   /* 底层：先铺一遍大而深的底色笔触；再顺着流线一笔接一笔排短笔触，排与排挨着走而不相压，缝里露出底色 */
   function prepaint() {
     const { W, dpr } = S, rand = rng(21), list = [];
-    base = document.createElement('canvas'); base.width = Math.round(W * dpr); base.height = Math.ceil(top * dpr);
-    const b = base.getContext('2d'), g = b.createLinearGradient(0, 0, 0, base.height);
-    g.addColorStop(0, '#081030'); g.addColorStop(.7, '#0e1d54'); g.addColorStop(1, '#16307a');
+    base = base || document.createElement('canvas'); base.width = Math.round(W * dpr); base.height = Math.round(S.H * dpr);
+    const b = base.getContext('2d', { alpha: false }), g = b.createLinearGradient(0, 0, 0, base.height);
+    g.addColorStop(0, '#081030'); g.addColorStop(.65, '#0e1d54'); g.addColorStop(.93, '#16307a'); g.addColorStop(1, '#0a1434');
     b.fillStyle = g; b.fillRect(0, 0, base.width, base.height);
     const add = (x, y, scale, lift) => {
       const row = pick(x, y, rand, lift, scale > 1.5), m = Math.hypot(fvx, fvy) || 1, k = reach();
@@ -874,18 +1014,24 @@ const Sky = (() => {
     for (const d of list) put(b, d.x, d.y, d.co, d.si, d.sx, d.sy, d.row, d.vr);
   }
 
-  /* 上层：会动的笔触。生在画面内（上风处多留一截），活几秒后淡出，再到别处重生 */
+  /* 上层：稀疏的一层会动的笔触，让底层“活”起来。生在画面内（上风处多留一截），活几秒后淡出，再到别处重生 */
   function spawn(d, rand) {
     const m = 16 * u;
-    d.x = -m + rand() * (S.W + m * 1.2); d.y = -m * .3 + rand() * (top + m * .6);
-    d.row = pick(d.x, d.y, rand, .05); d.vr = Math.floor(rand() * VAR);
+    for (let n = 0; n < 6; n++) {            // 文字背后少放：那里要静，也省得白画
+      d.x = -m + rand() * (S.W + m * 1.2); d.y = -m * .3 + rand() * (top + m * .6);
+      d.row = pick(d.x, d.y, rand, .02);
+      if (rand() > .75 * fcalm) break;
+    }
+    d.vr = Math.floor(rand() * VAR);
+    d.v = fv; d.w = fwarm; d.fit = 1;
     const k = reach();
-    d.sx = (.85 + rand() * .45) * k; d.sy = (.9 + rand() * .3) * Math.sqrt(k);
+    d.sx = (.8 + rand() * .35) * k; d.sy = (.85 + rand() * .25) * Math.sqrt(k);
     d.life = 7000 + rand() * 5000; d.age = 0;
-    steer(d);
+    steer(d); d.fit = d.goal;
   }
   function steer(d) {
     flow(d.x, d.y);
+    d.goal = 1 - smooth(.1, .26, Math.abs(tone(d.x, d.y) - d.v) + Math.abs(fwarm - d.w));
     for (const s of stirs) {                  // 点一下：附近的颜料跟着打个小旋
       const ex = d.x - s.x, ey = d.y - s.y, r = 9 * u, k = s.k * Math.exp(-(ex * ex + ey * ey) / (2 * r * r)) / r;
       fvx -= ey * k; fvy += ex * k;
@@ -904,17 +1050,17 @@ const Sky = (() => {
     const room = W - core.x - core.r * 1.3, side = Math.min(U * .16, room * .3);
     vort = [
       eye(core.x, core.y, core.r * .62, 2.3),
-      ...(side > core.r * .35 ? [eye(W - room / 2, H * .56, side, -1.8), eye(room / 2, H * .4, side, -1.8)] : []),
+      ...(side > core.r * .35 ? [eye(W - room / 2, H * .56, side, -1.8), eye(room / 2, H * .4, side, -1.8)] : [])
     ];
     /* 星月各带一个小旋涡，强度按所在处的风速加码，这样无论落在哪里都卷得成圈 */
     const lit = (o, p) => { flow(o.x, o.y); return eye(o.x, o.y, o.halo * .45, p * Math.max(1, Math.hypot(fvx, fvy)), o.halo); };
     vort.push(lit(moon, -2.4), ...stars.map((s, i) => lit(s, i % 2 ? 2.6 : -2.6)));
     makeAtlas();
     prepaint();
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#070d26'; ctx.fillRect(0, 0, W * S.dpr, H * S.dpr);
     const rand = rng(33);
     dabs = [];
-    for (let i = 0; i < 640; i++) { const d = {}; spawn(d, rand); d.age = rand() * d.life; dabs.push(d); }
+    const n = Math.min(300, W * H / (78 * u * u));     // 约占一成画面；每帧的开销几乎全在贴这些笔触上
+    for (let i = 0; i < n; i++) { const d = {}; spawn(d, rand); d.age = rand() * d.life; dabs.push(d); }
     stirs = [];
     if (bound) return; bound = true;
     Scene.on('tap', e => { if (!S.reduced) { stirs.push({ x: e.x, y: e.y, t: S.t, k: 0 }); if (stirs.length > 3) stirs.shift(); } });
@@ -930,10 +1076,11 @@ const Sky = (() => {
       const d = dabs[i];
       if ((d.age += dt) >= d.life) { if (i >= live) continue; spawn(d, Math.random); }   // 画质下调时，多出来的笔触寿终后不再重生
       else if (!((i + tick) & 7)) steer(d);                                              // 流场变化平缓，每 8 帧读一次就够
-      d.x += d.vx * dt; d.y += d.vy * dt;
+      d.x += d.vx * dt; d.y += d.vy * dt; d.fit += (d.goal - d.fit) * Math.min(1, dt / 500);
       if (d.x < -out || d.x > W + out || d.y < -out || d.y > top + out) continue;
       const a = Math.min(1, d.age / FADE, (d.life - d.age) / FADE);
-      ctx.globalAlpha = a * (2 - a) * .94;
+      ctx.globalAlpha = a * (2 - a) * .94 * d.fit;
+      if (ctx.globalAlpha < .02) continue;
       put(ctx, d.x, d.y, d.co, d.si, d.sx, d.sy, d.row, d.vr);
     }
   }
@@ -967,23 +1114,24 @@ const Finish = (() => {
     d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = Math.min(255, Math.abs(v) * 255);
   }
 
-  /* 纹理砖：先算一张“高度图”（平纹布 + 颜料的起伏 + 细颗粒），再假设光从左上打来，求出明暗 */
+  /* 纹理砖：先算一张“高度图”（平纹布 + 颜料的起伏 + 细颗粒），再假设光从左上打来，求出明暗。
+     经纬线各自一上一下地起伏，交叉处连续过渡，不会出现发硬的网格线 */
   function buildTile(dpr) {
     const P = Math.max(4, Math.round(3 * dpr)), N = 64, T = P * N;      // 线距（设备像素）× 根数
     const h = new Float32Array(T * T), rand = rng(29);
-    const bend = noise(8, 3), bump = noise(32, 5), slub = noise(N, 7);
+    const bend = noise(8, 3), bump = noise(32, 5), slub = noise(N, 7), knot = noise(N, 17);
     for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
-      const u = x / P + (bend(x / T * 8, y / T * 8) - .5) * .9, v = y / P + (bend(y / T * 8 + 3, x / T * 8 + 5) - .5) * .9;
+      const u = x / P + (bend(x / T * 8, y / T * 8) - .5) * 1.4, v = y / P + (bend(y / T * 8 + 3, x / T * 8 + 5) - .5) * 1.4;
       const i = Math.floor(u), j = Math.floor(v), a = Math.sin(Math.PI * (u - i)), b = Math.sin(Math.PI * (v - j));
-      const warp = a * (.55 + .45 * b) * (.6 + .8 * slub(i, 0)), weft = b * (.55 + .45 * a) * (.6 + .8 * slub(j, 9));
-      const weave = (i + j) & 1 ? warp : weft;                            // 经线纬线一上一下
+      const warp = a * (.5 + .5 * Math.cos(Math.PI * (v + i))) * (.6 + .8 * slub(i, v * .3));
+      const weft = b * (.5 + .5 * Math.cos(Math.PI * (u + j + 1))) * (.6 + .8 * slub(u * .3 + 21, j));
       const relief = bump(x / T * 32, y / T * 32) + .5 * bump(x / T * 64 + 7, y / T * 64 + 2);
-      h[y * T + x] = weave + relief * 1.5 + rand() * .5;
+      h[y * T + x] = Math.max(warp, weft) * (.5 + knot(u, v)) + relief * 1.6 + rand() * .3;
     }
-    const c = canvas(T, T), cx = c.getContext('2d'), img = cx.createImageData(T, T);
+    const c = canvas(T, T), cx = c.getContext('2d'), img = cx.createImageData(T, T), k = dpr < 1.5 ? .65 : 1;   // 低像素比屏上线距显得粗，减弱
     for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
       const lit = h[(y + T - 1) % T * T + (x + T - 1) % T] - h[(y + 1) % T * T + (x + 1) % T];
-      put(img.data, (y * T + x) * 4, lit > 0 ? lit * .085 : lit * .11);
+      put(img.data, (y * T + x) * 4, k * (lit > 0 ? lit * .065 : lit * .12));   // 暗面重、亮面轻：免得暗处发灰
     }
     cx.putImageData(img, 0, 0);
     return c;
@@ -991,6 +1139,7 @@ const Finish = (() => {
 
   function init(S) {
     const { W, H, U, dpr, core, box } = S, ctx = $('finish').getContext('2d');
+    const lights = [S.moon, ...S.stars].filter(Boolean);
     if (tileDpr !== dpr) { tile = buildTile(dpr); tileDpr = dpr; }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, W * dpr, H * dpr);
@@ -1008,13 +1157,18 @@ const Finish = (() => {
       // 暗角：以大数字为中心的“方圆形”，到屏幕四边都是 1，四角更大
       const dx = Math.abs(x - core.x) / (x < core.x ? core.x : W - core.x), dy = Math.abs(y - core.y) / (y < core.y ? core.y : H - core.y);
       const q = Math.pow(Math.pow(dx, 2.6) + Math.pow(dy, 2.6), 1 / 2.6);
-      const vignette = .34 * step(.62, 1.3, q) + .1 * step(U * .05, 0, Math.min(x, y, W - x, H - y));
+      // 星月附近少压一点，光晕不被暗角吃掉
+      const glow = Math.max(0, ...lights.map(L => step(L.halo * 1.15, L.r * 1.5, Math.hypot(x - L.x, y - L.y))));
+      // 小镇的灯窗在 H*.86～.90 一带：这条带上的暗角放松，窗光不被压没
+      const town = step(H * .78, H * .855, y) * step(H * .97, H * .905, y);
+      const spare = Math.max(glow, town), rim = step(U * .045, 0, Math.min(x, y, W - x, H - y));   // rim：贴着屏幕边的一圈
+      const vignette = (.3 * step(.66, 1.35, q) + .08 * rim) * (1 - .7 * spare);
       // 文字背后：圆角矩形向外羽化，没有边界
       const ex = Math.max(0, Math.abs(x - bx) - hw), ey = Math.max(0, Math.abs(y - by) - hh);
       const shade = .2 * step(feather * 2, feather * .5, Math.hypot(ex, ey));
       // 云斑：两层低频噪声，有的地方略沉、有的地方略亮
       const m = cloud(i * k * 3, j * k * 3) * .65 + cloud(i * k * 9 + 20, j * k * 9 + 40) * .35 - .5;
-      put(li.data, o, m * (m < 0 ? .16 : .05) - vignette - shade);
+      put(li.data, o, m * (m < 0 ? .16 * (1 - spare) : .05) - vignette - shade);
       wi.data[o + 3] = 255 * (.15 + .7 * step(.35, .7, cloud(i * k * 5 + 31, j * k * 5 + 11)));
     }
     wx.putImageData(wi, 0, 0); lx.putImageData(li, 0, 0);
@@ -1122,25 +1276,26 @@ const Fx = (() => {
     add({ spr: LIGHT + 1, x, y, flow: 0, size: 34, grow: 1.6, life: .45, hold: 0, a: .5 });
     add({ spr: LIGHT, x, y, flow: 0, size: 60, grow: .9, life: .7, hold: 0, a: .3 });
     for (let i = Math.max(4, Math.round(13 * k)); i--;) {
-      const a = R(0, 6.283), v = R(70, 250), c = star ? (Math.random() < .6 ? 0 : 1) : Math.random() < .3 ? accent : hue();
+      const a = R(0, 6.283), v = R(90, 300), c = star ? (Math.random() < .6 ? 0 : 1) : Math.random() < .3 ? accent : hue();
       add({ spr: dab(c), x, y, vx: Math.cos(a) * v - Math.sin(a) * 50, vy: Math.sin(a) * v + Math.cos(a) * 50 - 45, drag: R(3.2, 4.8), flow: R(16, 28), rise: R(6, 18), follow: true, size: R(11, 18), life: R(1.3, 2.3), hold: .45 });
     }
     for (let i = Math.round(7 * k); i--;) {
       const a = R(0, 6.283), v = R(90, 300);
-      add({ spr: LIGHT + (Math.random() < .6 ? 1 : star ? 0 : 2), x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, drag: 3.4, flow: 14, rise: R(4, 12), size: R(5, 9), life: R(.6, 1.25), hold: .2, a: .9, tw: .6 });
+      add({ spr: LIGHT + (Math.random() < .6 ? 1 : star ? 0 : 2), x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, drag: 3.4, flow: 14, rise: R(4, 12), size: R(11, 17), life: R(.6, 1.25), hold: .2, a: .9, tw: .6 });
     }
-    for (let i = heat < 2.2 ? 2 + (Math.random() < .5) : 1; i--;)
-      add({ spr: HEART + (star ? 1 + (i & 1) : Math.floor(R(0, 4))), x: x + R(-10, 10), y: y + R(-8, 4), vx: R(-34, 34), vy: R(-95, -45), drag: 2.6, flow: 12, rise: R(20, 32), sway: R(8, 16), ang: R(-.3, .3), wob: .2, size: R(21, 29), life: R(2, 2.9), hold: .5, pop: true, a: .92 });
+    const hearts = heat < 2.2 ? 2 + (Math.random() < .5) : 1, first = Math.floor(R(0, 4));
+    for (let i = hearts; i--;)                   // 几颗爱心呈扇形散开，不叠在一起
+      add({ spr: HEART + (star ? 1 + (i & 1) : (first + i) % 4), x: x + R(-6, 6), y: y + R(-8, 4), vx: (i - (hearts - 1) / 2) * 62 + R(-14, 14), vy: R(-100, -55), drag: 2.6, flow: 12, rise: R(20, 32), sway: R(8, 16), ang: R(-.3, .3), wob: .2, size: R(21, 29), life: R(2, 2.9), hold: .5, pop: true, a: .92 });
   }
 
   /* 一粒星尘（k = 1 是手指，更小是鼠标路过）；地平线以下换成萤火 */
   function mote(x, y, k, lift) {
     if (y > S.horizon) {
       if (Math.random() < .4) add({ spr: LIGHT + 3, x, y, flow: 5, rise: R(4, 14), sway: R(6, 14), size: R(8, 12), life: R(1.4, 2.4), fadeIn: .2, a: .8 * k, tw: .5, fly: true });
-    } else if (k === 1 && Math.random() < .16) {
-      add({ spr: dab(Math.random() < .6 ? 0 : 1), x, y, vx: R(-20, 20), vy: R(-20, 20), flow: 16, rise: lift || R(4, 12), follow: true, size: R(8, 12), life: R(.8, 1.4), hold: .3, a: .9 });
+    } else if (k === 1 && Math.random() < .28) {
+      add({ spr: dab(Math.random() < .6 ? 0 : 1), x, y, vx: R(-20, 20), vy: R(-20, 20), flow: 16, rise: lift || R(4, 12), follow: true, size: R(9, 13), life: R(.8, 1.4), hold: .3, a: .9 });
     } else {
-      add({ spr: LIGHT + (Math.random() < .62 ? 1 : Math.random() < .6 ? 0 : 2), x: x + R(-5, 5), y: y + R(-5, 5), vx: R(-14, 14), vy: R(-14, 14), flow: 14, rise: lift || R(2, 10), size: R(4.5, 8.5) * (.6 + .4 * k), life: R(.55, 1.15) * (.6 + .4 * k), hold: .2, a: .85 * k, tw: .55 });
+      add({ spr: LIGHT + (Math.random() < .62 ? 1 : Math.random() < .6 ? 0 : 2), x: x + R(-5, 5), y: y + R(-5, 5), vx: R(-14, 14), vy: R(-14, 14), flow: 14, rise: lift || R(2, 10), size: R(10, 17) * (.6 + .4 * k), life: R(.6, 1.2) * (.6 + .4 * k), hold: .2, a: .9 * k, tw: .5 });
     }
   }
   /* 手指（或按住的鼠标）划过：每隔几像素落一粒星尘；鼠标只是路过时安静得多。按住不动：指尖聚起一点光，光点慢慢往上飘 */
@@ -1181,7 +1336,7 @@ const Fx = (() => {
       if (score < low) { low = score; best = { x, y, ang, len }; }
     }
     const life = R(.6, .85);
-    comets.push({ ...best, v: best.len / life, life, age: 0, run: 0, turn: R(-.45, .45), size: Math.max(17, Math.min(27, U * .046)) });
+    comets.push({ ...best, v: best.len / life, life, age: 0, run: 0, turn: R(-.45, .45), size: Math.max(20, Math.min(30, U * .055)) });
   }
   /* 日程：流星每隔十几秒一颗；纪念日头几秒从上空落一阵金屑，多三颗流星，然后归于平静 */
   function ambient(s) {
@@ -1189,9 +1344,10 @@ const Fx = (() => {
     if (S.milestone !== seen) { seen = S.milestone; if (seen) { fete = Math.max(age, 1500); extra = 3; nextStar = fete + R(17000, 26000); } }
     const u = (age - fete) / 1000;
     if (u >= 0 && u < 9) {
-      shower += s * 7 * Math.min(2.4, Math.max(1, S.W / 400)) * S.quality * Math.min(1, u / 1.2, (9 - u) / 3.5);
-      for (; shower >= 1; shower--) {
-        add({ spr: dab(Math.random() < .55 ? 0 : Math.random() < .5 ? 1 : Math.random() < .6 ? 2 : 4), x: R(0, S.W), y: R(-12, S.H * .2), rise: -R(30, 54), sway: R(10, 22), flow: 12, ang: R(0, 6.3), spin: R(-1.3, 1.3), size: R(10, 16), life: R(4, 6), fadeIn: .5, hold: .5, a: .85, soft: true });
+      shower += s * 10 * Math.min(2.4, Math.max(1, S.W / 400)) * S.quality * Math.min(1, u / 1.2, (9 - u) / 3.5);
+      for (; shower >= 1; shower--) {                                     // 金屑里夹几片玫瑰色的小心，像花瓣
+        const petal = Math.random() < .14, r = Math.random();
+        add({ spr: petal ? HEART + (r < .6 ? 0 : 3) : dab(r < .5 ? 0 : r < .75 ? 1 : r < .9 ? 2 : 4), x: R(0, S.W), y: R(-14, S.H * .3), rise: -R(38, 62), sway: R(12, 26), flow: 12, ang: R(0, 6.3), spin: R(-1.2, 1.2) * (petal ? .5 : 1), wob: petal ? .5 : 0, size: petal ? R(15, 20) : R(12, 18), life: R(5.5, 8), fadeIn: .6, hold: .55, a: .88, soft: true });
       }
       if (extra && u > 9.4 - extra * 2.3) { comet(); extra--; }
     }
@@ -1203,7 +1359,7 @@ const Fx = (() => {
     n = 0; comets.length = 0; x0 = y0 = Infinity; x1 = y1 = -Infinity; px = NaN;
     if (S.reduced) return;                       // 减弱动效：什么都不画，也不响应点按
     paintAtlas();
-    const rand = rng(29), count = Math.max(3, Math.min(6, Math.round(S.W / 150)));
+    const rand = rng(29), count = Math.max(2, Math.min(4, Math.round(S.W / 200)));
     flies.length = 0;                            // 萤火虫：各守着山丘、小镇上空的一小块地方
     for (let i = 0; i < count; i++) flies.push({ x: S.W * (.16 + .8 * rand()), y: S.H * (.815 + .105 * rand()), ph: rand() * 6.3, f: .55 + rand() * .45 });
     /* 一屏放得下时，把拖动整个交给页面（见 fx.css），否则浏览器会把它当成滚动，拖几像素就取消指针事件 */
@@ -1226,9 +1382,9 @@ const Fx = (() => {
       ctx.clearRect(x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4);
       x0 = y0 = Infinity; x1 = y1 = -Infinity;
     }
-    /* 萤火虫：慢慢游荡，亮一阵、暗一阵；暗的时候不画 */
+    /* 萤火虫：慢慢游荡，每隔十来秒亮两三秒；暗的时候不画，画布也就不用动 */
     for (let i = Math.ceil(flies.length * S.quality); i-- && S.age > 2500;) {
-      const f = flies[i], th = t * .001 * f.f, b = (Math.sin(th * .8 + f.ph * 3) - .4) / .6;
+      const f = flies[i], th = t * .001 * f.f, b = (Math.sin(th * .8 + f.ph * 3) - .7) / .3;
       if (b > 0) blit(LIGHT + 3, f.x + Math.sin(th * .37 + f.ph) * 26 + Math.sin(th * .83 + f.ph * 2) * 9, f.y + Math.sin(th * .53 + f.ph * 1.7) * 11, 15, b * b * (3 - 2 * b) * .85, 1, 0);
     }
     /* 流星：沿略弯的路线前进，一路留下颜料点，越到后面越细、越疏 */
@@ -1239,9 +1395,9 @@ const Fx = (() => {
       c.x += co * step; c.y += si * step;
       for (c.run += step; c.run >= gap; c.run -= gap) {
         add({ spr: dab(Math.random() < .5 - .3 * k ? 1 : Math.random() < .8 ? 0 : 2), x: c.x - co * c.run, y: c.y - si * c.run, vx: co * 26, vy: si * 26, drag: 3, flow: 0, ang: c.ang, size: c.size * (1.15 - .6 * k), life: R(.4, .56), fadeIn: .03, hold: .15, a: .95 - .35 * k, soft: true });
-        if (Math.random() < .4) add({ spr: LIGHT + (Math.random() < .5 ? 1 : 2), x: c.x - co * c.run + R(-5, 5), y: c.y - si * c.run + R(-5, 5), flow: 8, size: R(4, 7), life: R(.4, .8), hold: .2, a: .8, tw: .5, soft: true });
+        if (Math.random() < .4) add({ spr: LIGHT + (Math.random() < .5 ? 1 : 2), x: c.x - co * c.run + R(-5, 5), y: c.y - si * c.run + R(-5, 5), flow: 8, size: R(9, 14), life: R(.4, .8), hold: .2, a: .8, tw: .5, soft: true });
       }
-      blit(LIGHT + 1, c.x, c.y, c.size * 1.5, Math.pow(Math.sin(Math.PI * k), .5) * .95, 1, 0);
+      blit(LIGHT + 1, c.x, c.y, c.size * 1.9, Math.pow(Math.sin(Math.PI * k), .5), 1, 0);
     }
     /* 粒子：初速很快散掉，之后跟着天空的气流走（自左向右的风，绕着大数字顺时针打转），柔和地淡出 */
     const r2 = core.r * core.r * .384, g = 3.8 * core.r * .62;
@@ -1260,7 +1416,7 @@ const Fx = (() => {
       let a = p.a * Math.min(1, p.age / p.fadeIn) * (k < p.hold ? 1 : .5 + .5 * Math.cos(Math.PI * (k - p.hold) / (1 - p.hold)));
       if (p.tw) a *= 1 - p.tw * (.5 + .5 * Math.sin(p.age * 9 + p.ph * 7));
       if (!p.fly) a *= Math.min(1, Math.max(0, (horizon - p.y) / 24));                                   // 地平线以下只留萤火
-      if (p.soft && p.x > box.left && p.x < box.right && p.y > box.top && p.y < box.bottom) a *= .55;     // 久留的东西经过文字时更淡
+      if (p.x > box.left && p.x < box.right && p.y > box.top && p.y < box.bottom) a *= p.soft ? .55 : .75;   // 经过文字时更淡，久留的更淡
       if (a < .012) continue;
       const sz = p.size * (1 + p.grow * k) * (p.pop ? Math.min(1, .4 + p.age * 2.4) : 1);
       if (p.spr >= LIGHT) { blit(p.spr, p.x, p.y, sz, a, 1, 0); continue; }
